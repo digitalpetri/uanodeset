@@ -8,6 +8,7 @@ import com.digitalpetri.opcua.uanodeset.DataTypeInfo;
 import com.digitalpetri.opcua.uanodeset.DataTypeInfoTree;
 import com.digitalpetri.opcua.uanodeset.NodeSet;
 import com.digitalpetri.opcua.uanodeset.parser.IndexUtil;
+import com.digitalpetri.opcua.uanodeset.util.NodeIdUtil;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBElement;
 import jakarta.xml.bind.JAXBException;
@@ -16,6 +17,7 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.stream.Stream;
@@ -35,10 +37,13 @@ import org.eclipse.milo.opcua.sdk.server.nodes.UaReferenceTypeNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableTypeNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaViewNode;
+import org.eclipse.milo.opcua.stack.core.NodeIds;
+import org.eclipse.milo.opcua.stack.core.encoding.binary.OpcUaDefaultBinaryEncoding;
 import org.eclipse.milo.opcua.stack.core.encoding.xml.OpcUaXmlDecoder;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DateTime;
 import org.eclipse.milo.opcua.stack.core.types.builtin.ExpandedNodeId;
+import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName;
 import org.eclipse.milo.opcua.stack.core.types.builtin.StatusCode;
@@ -312,7 +317,7 @@ public class NodeSetNodeLoader {
       Object any = variable.getValue().getAny();
 
       try {
-        value = decodeXmlValue(any);
+        value = decodeXmlValue(variable.getDataType(), any);
       } catch (Exception e) {
         logger.warn("Failed to decode XML value for Variable: {}", variable.getNodeId(), e);
       }
@@ -396,7 +401,7 @@ public class NodeSetNodeLoader {
       Object any = variableType.getValue().getAny();
 
       try {
-        value = decodeXmlValue(any);
+        value = decodeXmlValue(variableType.getDataType(), any);
       } catch (Exception e) {
         logger.warn("Failed to decode XML value for VariableType: {}", variableType.getNodeId(), e);
       }
@@ -436,7 +441,7 @@ public class NodeSetNodeLoader {
         ubyte(view.getEventNotifier()));
   }
 
-  private Variant decodeXmlValue(Object value) throws Exception {
+  private Variant decodeXmlValue(String dataTypeId, Object value) throws Exception {
     JAXBContext jaxbContext = JAXBContext.newInstance(ObjectFactory.class);
     Marshaller marshaller = jaxbContext.createMarshaller();
 
@@ -500,12 +505,35 @@ public class NodeSetNodeLoader {
 
     decoder.setInput(new StringReader(xmlString));
     Object valueObject = decoder.readVariantValue();
-    //    if (valueObject instanceof ExtensionObject xo) {
-    //      xo.transcode(
-    //          context.getServer().getStaticEncodingContext(),
-    //          null,
-    //          OpcUaDefaultBinaryEncoding.getInstance());
-    //    }
+
+    if (valueObject instanceof ExtensionObject xo) {
+      List<Reference> hasEncodingReferences =
+          nodeSet.getExplicitReferences(dataTypeId).stream()
+              .filter(
+                  r ->
+                      r.isIsForward()
+                          && NodeIdUtil.equals(r.getReferenceType(), NodeIds.HasEncoding))
+              .toList();
+
+      try {
+        String encodingId =
+            hasEncodingReferences.stream()
+                .map(r -> nodeSet.getNode(r.getValue()))
+                .filter(Objects::nonNull)
+                .filter(n -> n.getBrowseName().equals("Default Binary"))
+                .map(UANode::getNodeId)
+                .findFirst()
+                .orElseThrow();
+
+        valueObject =
+            xo.transcode(
+                context.getServer().getStaticEncodingContext(),
+                reindexNodeId(encodingId),
+                OpcUaDefaultBinaryEncoding.getInstance());
+      } catch (Exception e) {
+        logger.warn("Failed to transcode ExtensionObject: {}", xo, e);
+      }
+    }
 
     return Variant.of(valueObject);
   }
