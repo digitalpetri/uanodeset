@@ -25,6 +25,9 @@ import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import org.eclipse.milo.opcua.sdk.core.types.codec.DynamicCodecFactory;
+import org.eclipse.milo.opcua.sdk.core.typetree.DataType;
+import org.eclipse.milo.opcua.sdk.core.typetree.DataTypeTree;
 import org.eclipse.milo.opcua.sdk.server.ObjectTypeManager;
 import org.eclipse.milo.opcua.sdk.server.VariableTypeManager;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaDataTypeNode;
@@ -38,6 +41,7 @@ import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableTypeNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaViewNode;
 import org.eclipse.milo.opcua.stack.core.NodeIds;
+import org.eclipse.milo.opcua.stack.core.encoding.EncodingContext;
 import org.eclipse.milo.opcua.stack.core.encoding.binary.OpcUaDefaultBinaryEncoding;
 import org.eclipse.milo.opcua.stack.core.encoding.xml.OpcUaXmlDecoder;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
@@ -89,12 +93,18 @@ public class NodeSetNodeLoader {
 
   private final NodeSet nodeSet;
   private final UaNodeContext context;
+  private final EncodingContext encodingContext;
   private final Predicate<String> namespaceFilter;
 
   public NodeSetNodeLoader(
-      NodeSet nodeSet, UaNodeContext context, Predicate<String> namespaceFilter) {
+      NodeSet nodeSet,
+      UaNodeContext context,
+      EncodingContext encodingContext,
+      Predicate<String> namespaceFilter) {
+
     this.nodeSet = nodeSet;
     this.context = context;
+    this.encodingContext = encodingContext;
     this.namespaceFilter = namespaceFilter;
   }
 
@@ -113,9 +123,20 @@ public class NodeSetNodeLoader {
           UaNode variableTypeNode = buildVariableTypeNode(variableType);
 
           context.getNodeManager().addNode(variableTypeNode);
+        } else if (node instanceof UADataType dataType) {
+          UaDataTypeNode dataTypeNode = buildDataTypeNode(dataType);
+
+          context.getNodeManager().addNode(dataTypeNode);
+        } else if (node instanceof UAReferenceType referenceType) {
+          UaNode referenceTypeNode = buildReferenceTypeNode(referenceType);
+
+          context.getNodeManager().addNode(referenceTypeNode);
         }
       }
     }
+
+    context.getServer().updateDataTypeTree();
+    context.getServer().updateReferenceTypeTree();
 
     // Build all other node types.
     for (UANode node : nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod()) {
@@ -124,11 +145,7 @@ public class NodeSetNodeLoader {
           nodeSet.getNodeSet().getNamespaceUris().getUri().get(getNamespaceIndex(nodeId));
 
       if (namespaceFilter.test(namespaceUri)) {
-        if (node instanceof UADataType dataType) {
-          UaDataTypeNode dataTypeNode = buildDataTypeNode(dataType);
-
-          context.getNodeManager().addNode(dataTypeNode);
-        } else if (node instanceof UAObject object) {
+        if (node instanceof UAObject object) {
           UaNode objectNode = buildObjectNode(object);
 
           context.getNodeManager().addNode(objectNode);
@@ -136,10 +153,6 @@ public class NodeSetNodeLoader {
           UaNode methodNode = buildMethodNode(method);
 
           context.getNodeManager().addNode(methodNode);
-        } else if (node instanceof UAReferenceType referenceType) {
-          UaNode referenceTypeNode = buildReferenceTypeNode(referenceType);
-
-          context.getNodeManager().addNode(referenceTypeNode);
         } else if (node instanceof UAVariable variable) {
           UaNode variableNode = buildVariableNode(variable);
 
@@ -185,6 +198,8 @@ public class NodeSetNodeLoader {
                       .orElseThrow();
 
           dataTypeNode.setDataTypeDefinition(newDataTypeDefinition(dataType, dataTypeTree));
+
+          registerDynamicDataType(dataTypeNode.getNodeId());
         }
       }
     }
@@ -441,6 +456,24 @@ public class NodeSetNodeLoader {
         ubyte(view.getEventNotifier()));
   }
 
+  private void registerDynamicDataType(NodeId dataTypeId) {
+    DataTypeTree dataTypeTree = context.getServer().getDataTypeTree();
+    DataType dataType = dataTypeTree.getDataType(dataTypeId);
+    assert dataType != null;
+
+    var codec = DynamicCodecFactory.create(dataType, dataTypeTree);
+
+    context
+        .getServer()
+        .getDynamicDataTypeManager()
+        .registerType(
+            dataTypeId,
+            codec,
+            dataType.getBinaryEncodingId(),
+            dataType.getXmlEncodingId(),
+            dataType.getJsonEncodingId());
+  }
+
   private Variant decodeXmlValue(String dataTypeId, Object value) throws Exception {
     JAXBContext jaxbContext = JAXBContext.newInstance(ObjectFactory.class);
     Marshaller marshaller = jaxbContext.createMarshaller();
@@ -465,7 +498,7 @@ public class NodeSetNodeLoader {
     String xmlString = sw.toString();
 
     OpcUaXmlDecoder decoder =
-        new OpcUaXmlDecoder(context.getServer().getStaticEncodingContext()) {
+        new OpcUaXmlDecoder(encodingContext) {
           @Override
           protected NodeId reindexNodeId(NodeId nodeId) {
             String namespaceUri =
@@ -527,7 +560,7 @@ public class NodeSetNodeLoader {
 
         valueObject =
             xo.transcode(
-                context.getServer().getStaticEncodingContext(),
+                encodingContext,
                 reindexNodeId(encodingId),
                 OpcUaDefaultBinaryEncoding.getInstance());
       } catch (Exception e) {

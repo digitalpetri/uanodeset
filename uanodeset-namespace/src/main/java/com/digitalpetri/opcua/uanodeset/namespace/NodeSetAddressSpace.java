@@ -12,6 +12,7 @@ import org.eclipse.milo.opcua.sdk.server.SimpleAddressSpaceFilter;
 import org.eclipse.milo.opcua.sdk.server.items.DataItem;
 import org.eclipse.milo.opcua.sdk.server.items.MonitoredItem;
 import org.eclipse.milo.opcua.sdk.server.util.SubscriptionModel;
+import org.eclipse.milo.opcua.stack.core.encoding.EncodingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,14 +71,26 @@ public abstract class NodeSetAddressSpace extends ManagedAddressSpaceFragmentWit
   protected abstract boolean filterNamespace(String namespaceUri);
 
   /**
+   * Get the {@link EncodingContext} to use when decoding/encoding values.
+   *
+   * <p>If this NodeSet is accompanied by code-generated classes for each type, then this should be
+   * the Server's "static" EncodingContext. Otherwise, it should be the "dynamic" EncodingContext.
+   *
+   * @see OpcUaServer#getDynamicEncodingContext()
+   * @see OpcUaServer#getStaticEncodingContext()
+   * @return the {@link EncodingContext} to use.
+   */
+  protected abstract EncodingContext getEncodingContext();
+
+  /**
    * Create an {@link InputStream} for the UANodeSet file.
    *
    * @return an {@link InputStream} for the UANodeSet file.
    */
-  protected abstract InputStream newNodeSetInputStream();
+  protected abstract InputStream getNodeSetInputStream();
 
   private void load() {
-    try (InputStream inputStream = newNodeSetInputStream()) {
+    try (InputStream inputStream = getNodeSetInputStream()) {
       NodeSet nodeSet = NodeSet.load(inputStream);
 
       nodeSet
@@ -86,7 +99,9 @@ public abstract class NodeSetAddressSpace extends ManagedAddressSpaceFragmentWit
           .getUri()
           .forEach(uri -> getServer().getNamespaceTable().add(uri));
 
-      var loader = new NodeSetNodeLoader(nodeSet, getNodeContext(), this::filterNamespace);
+      var loader =
+          new NodeSetNodeLoader(
+              nodeSet, getNodeContext(), getEncodingContext(), this::filterNamespace);
 
       loader.loadNodes();
     } catch (JAXBException | IOException e) {
