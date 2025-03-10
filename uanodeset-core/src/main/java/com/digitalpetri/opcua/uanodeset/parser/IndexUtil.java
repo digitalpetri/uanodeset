@@ -181,23 +181,19 @@ public final class IndexUtil {
         }
     }
 
-    private static void reindexXmlNodeIdentifierElements(
-        Node xmlNode,
-        UriTable mergedTable,
-        UriTable originalTable
-    ) {
+  private static void reindexXmlNodeIdentifierElements(
+      Node xmlNode, UriTable mergedTable, UriTable originalTable) {
 
-        if ("Identifier".equals(xmlNode.getNodeName())) {
-            String nodeValue = xmlNode.getTextContent();
-            if (nodeValue != null) {
-                xmlNode.setTextContent(reindexNodeId(nodeValue, mergedTable, originalTable));
-            }
-        } else {
-            NodeList childNodes = xmlNode.getChildNodes();
-            for (int i = 0; i < childNodes.getLength(); i++) {
-                reindexXmlNodeIdentifierElements(childNodes.item(i), mergedTable, originalTable);
-            }
-        }
+    if ("Identifier".equals(xmlNode.getLocalName())) {
+      String nodeValue = xmlNode.getTextContent();
+      if (nodeValue != null) {
+        xmlNode.setTextContent(reindexNodeId(nodeValue, mergedTable, originalTable));
+      }
+    } else {
+      NodeList childNodes = xmlNode.getChildNodes();
+      for (int i = 0; i < childNodes.getLength(); i++) {
+        reindexXmlNodeIdentifierElements(childNodes.item(i), mergedTable, originalTable);
+      }
     }
-
+  }
 }
