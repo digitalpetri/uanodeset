@@ -1,5 +1,6 @@
 package com.digitalpetri.opcua.uanodeset.parser;
 
+import org.eclipse.milo.opcua.stack.core.util.Namespaces;
 import org.junit.jupiter.api.Test;
 import org.opcfoundation.ua.UriTable;
 
@@ -12,10 +13,12 @@ class IndexUtilTest {
         var nodeId = "ns=1;s=test";
 
         var merged = new UriTable();
+        merged.getUri().add(Namespaces.OPC_UA);
         merged.getUri().add("uri1");
         merged.getUri().add("uri2");
 
         var original = new UriTable();
+        original.getUri().add(Namespaces.OPC_UA);
         original.getUri().add("uri2");
 
         String reindexed = IndexUtil.reindexNodeId(nodeId, merged, original);
@@ -28,15 +31,16 @@ class IndexUtilTest {
         var nodeId = "ns=1;s=test";
 
         var merged = new UriTable();
+        merged.getUri().add(Namespaces.OPC_UA);
         merged.getUri().add("uri1");
 
         var original = new UriTable();
+        original.getUri().add(Namespaces.OPC_UA);
         original.getUri().add("uri1");
 
         String reindexed = IndexUtil.reindexNodeId(nodeId, merged, original);
 
         assertEquals("ns=1;s=test", reindexed);
-        assertSame(reindexed, nodeId);
     }
 
     @Test
@@ -44,9 +48,11 @@ class IndexUtilTest {
         var nodeId = "ns=1;s=test";
 
         var merged = new UriTable();
+        merged.getUri().add(Namespaces.OPC_UA);
         merged.getUri().add("uri1");
 
         var original = new UriTable();
+        original.getUri().add(Namespaces.OPC_UA);
         original.getUri().add("uri2");
 
         assertThrows(

@@ -82,16 +82,13 @@ public final class IndexUtil {
 
         if (m.matches()) {
             int originalIndex = Integer.parseInt(m.group(1));
-            String originalUri = originalTable.getUri().get(originalIndex - 1);
+            String originalUri = originalTable.getUri().get(originalIndex);
             int mergedIndex = mergedTable.getUri().indexOf(originalUri);
 
             if (mergedIndex == -1) {
                 throw new IllegalArgumentException("URI not found in mergedTable: " + originalUri);
-            } else if (mergedIndex + 1 == originalIndex) {
-                // Don't call redundant String.format if the indices turn out to be the same.
-                return nodeId;
             } else {
-                return String.format("ns=%d;%s", mergedIndex + 1, m.group(2));
+                return String.format("ns=%d;%s", mergedIndex, m.group(2));
             }
         } else {
             return nodeId;
