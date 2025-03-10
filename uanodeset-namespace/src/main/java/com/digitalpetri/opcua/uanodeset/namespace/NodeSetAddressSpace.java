@@ -2,7 +2,6 @@ package com.digitalpetri.opcua.uanodeset.namespace;
 
 import com.digitalpetri.opcua.uanodeset.NodeSet;
 import jakarta.xml.bind.JAXBException;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import org.eclipse.milo.opcua.sdk.server.AddressSpaceFilter;
@@ -83,15 +82,17 @@ public abstract class NodeSetAddressSpace extends ManagedAddressSpaceFragmentWit
   protected abstract EncodingContext getEncodingContext();
 
   /**
-   * Create an {@link InputStream} for the UANodeSet file.
+   * Get the {@link InputStream}s to load NodeSet XML files from.
    *
-   * @return an {@link InputStream} for the UANodeSet file.
+   * @return a list of {@link InputStream}s to load NodeSet XML files from.
    */
-  protected abstract InputStream getNodeSetInputStream();
+  protected abstract List<InputStream> getNodeSetInputStreams();
 
   private void load() {
-    try (InputStream inputStream = getNodeSetInputStream()) {
-      NodeSet nodeSet = NodeSet.load(inputStream);
+    List<InputStream> inputStreams = getNodeSetInputStreams();
+
+    try {
+      NodeSet nodeSet = NodeSet.load(inputStreams);
 
       nodeSet
           .getNodeSet()
@@ -104,8 +105,16 @@ public abstract class NodeSetAddressSpace extends ManagedAddressSpaceFragmentWit
               nodeSet, getNodeContext(), getEncodingContext(), this::filterNamespace);
 
       loader.loadNodes();
-    } catch (JAXBException | IOException e) {
+    } catch (JAXBException e) {
       logger.error("Error loading NodeSet", e);
+    } finally {
+      for (InputStream inputStream : getNodeSetInputStreams()) {
+        try {
+          inputStream.close();
+        } catch (Exception e) {
+          logger.error("Error closing NodeSet input stream", e);
+        }
+      }
     }
   }
 }

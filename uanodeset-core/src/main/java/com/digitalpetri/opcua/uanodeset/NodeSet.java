@@ -7,14 +7,13 @@ import com.google.common.base.Equivalence;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import jakarta.xml.bind.JAXBException;
-import org.eclipse.milo.opcua.stack.core.util.Namespaces;
-import org.jetbrains.annotations.Nullable;
-import org.opcfoundation.ua.*;
-
 import java.io.InputStream;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
+import org.eclipse.milo.opcua.stack.core.util.Namespaces;
+import org.jetbrains.annotations.Nullable;
+import org.opcfoundation.ua.*;
 
 /**
  * Holds a UANodeSet and does some post-processing to make it a little more usable.
@@ -249,24 +248,24 @@ public class NodeSet implements NodeSetContext {
   }
 
   public static NodeSet load(InputStream inputStream) throws JAXBException {
-    UANodeSet nodeSet = UANodeSetParser.parse(inputStream);
-
-    if (nodeSet.getModels()
-        .getModel()
-        .stream()
-        .noneMatch(e -> Objects.equals(Namespaces.OPC_UA, e.getModelUri()))
-    ) {
-
-      // Merge the base OPC UANodeSet if it's not already present.
-      UANodeSet baseNodeSet = UANodeSetParser.parse(
-          NodeSet.class.getClassLoader()
-              .getResourceAsStream("1.05/Opc.Ua.NodeSet2.xml")
-      );
-
-      return new NodeSet(UANodeSetMerger.merge(baseNodeSet, nodeSet));
-    } else {
-      return new NodeSet(nodeSet);
-    }
+    return load(Collections.singletonList(inputStream));
   }
 
+  public static NodeSet load(List<InputStream> inputStreams) throws JAXBException {
+    var nodeSets = new ArrayList<UANodeSet>();
+    for (InputStream inputStream : inputStreams) {
+      nodeSets.add(UANodeSetParser.parse(inputStream));
+    }
+
+    // merge the base OPC UA NodeSet with the provided NodeSets
+    UANodeSet mergedNodeSet =
+        UANodeSetParser.parse(
+            NodeSet.class.getClassLoader().getResourceAsStream("1.05/Opc.Ua.NodeSet2.xml"));
+
+    for (UANodeSet nodeSet : nodeSets) {
+      mergedNodeSet = UANodeSetMerger.merge(mergedNodeSet, nodeSet);
+    }
+
+    return new NodeSet(mergedNodeSet);
+  }
 }
