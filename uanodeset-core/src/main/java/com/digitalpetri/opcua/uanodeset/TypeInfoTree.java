@@ -1,12 +1,11 @@
 package com.digitalpetri.opcua.uanodeset;
 
 import com.digitalpetri.opcua.uanodeset.util.NodeIdUtil;
+import java.util.HashMap;
+import java.util.Map;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.jetbrains.annotations.Nullable;
 import org.opcfoundation.ua.UAType;
-
-import java.util.HashMap;
-import java.util.Map;
 
 public abstract class TypeInfoTree<T extends UAType, N extends TypeInfo<T>> {
 
@@ -19,8 +18,7 @@ public abstract class TypeInfoTree<T extends UAType, N extends TypeInfo<T>> {
 
     //noinspection unchecked
     rootTypeInfo.traverse(
-        typeInfo -> typeInfos.put(typeInfo.getTypeNode().getNodeId(), (N) typeInfo)
-    );
+        typeInfo -> typeInfos.put(typeInfo.getTypeNode().getNodeId(), (N) typeInfo));
   }
 
   /**
@@ -76,5 +74,4 @@ public abstract class TypeInfoTree<T extends UAType, N extends TypeInfo<T>> {
 
     return parentNodeId.equals(superNodeId) || isSubtypeOf(parentNodeId, superNodeId);
   }
-
 }

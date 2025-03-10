@@ -1,21 +1,21 @@
 package com.digitalpetri.opcua.uanodeset;
 
-import org.jetbrains.annotations.Nullable;
-import org.opcfoundation.ua.UAType;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import org.jetbrains.annotations.Nullable;
+import org.opcfoundation.ua.UAType;
 
 /**
  * A tree node in the {@link TypeInfoTree} for some {@link UAType}:
+ *
  * <ul>
- *     <li>{@link org.opcfoundation.ua.UADataType}
- *     <li>{@link org.opcfoundation.ua.UAObjectType}
- *     <li>{@link org.opcfoundation.ua.UAVariableType}
- *     <li>{@link org.opcfoundation.ua.UAReferenceType}
+ *   <li>{@link org.opcfoundation.ua.UADataType}
+ *   <li>{@link org.opcfoundation.ua.UAObjectType}
+ *   <li>{@link org.opcfoundation.ua.UAVariableType}
+ *   <li>{@link org.opcfoundation.ua.UAReferenceType}
  * </ul>
  *
  * @param <T> the {@link UAType} contained in this tree node.
@@ -85,18 +85,14 @@ public abstract class TypeInfo<T extends UAType> {
       TypeInfo<T> tree,
       BiConsumer<TypeInfo<T>, Integer> c,
       int depth,
-      @Nullable Comparator<TypeInfo<T>> comparator
-  ) {
+      @Nullable Comparator<TypeInfo<T>> comparator) {
 
     c.accept(tree, depth);
 
     if (comparator != null) {
-      tree.children.stream()
-          .sorted(comparator)
-          .forEach(t -> traverse(t, c, depth + 1, comparator));
+      tree.children.stream().sorted(comparator).forEach(t -> traverse(t, c, depth + 1, comparator));
     } else {
       tree.children.forEach(t -> traverse(t, c, depth + 1, null));
     }
   }
-
 }

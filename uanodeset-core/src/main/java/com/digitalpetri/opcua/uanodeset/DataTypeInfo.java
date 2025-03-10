@@ -1,14 +1,13 @@
 package com.digitalpetri.opcua.uanodeset;
 
-import org.jetbrains.annotations.Nullable;
-import org.opcfoundation.ua.DataTypeDefinition;
-import org.opcfoundation.ua.DataTypeField;
-import org.opcfoundation.ua.UADataType;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import org.jetbrains.annotations.Nullable;
+import org.opcfoundation.ua.DataTypeDefinition;
+import org.opcfoundation.ua.DataTypeField;
+import org.opcfoundation.ua.UADataType;
 
 public class DataTypeInfo extends TypeInfo<UADataType> {
 
@@ -40,7 +39,8 @@ public class DataTypeInfo extends TypeInfo<UADataType> {
   /**
    * Get the List of {@link DataTypeField} inherited from the definition of all parent datatypes.
    *
-   * @return the List of {@link DataTypeField} inherited from the definition of all parent datatypes.
+   * @return the List of {@link DataTypeField} inherited from the definition of all parent
+   *     datatypes.
    */
   public List<DataTypeField> getInheritedFields() {
     if (inheritedFields == null) {
@@ -57,20 +57,17 @@ public class DataTypeInfo extends TypeInfo<UADataType> {
 
       var fields = new LinkedHashMap<String, DataTypeField>();
 
-      parentTypeInfos.forEach(typeInfo -> {
-        DataTypeDefinition definition = typeInfo.getTypeNode().getDefinition();
-        if (definition != null) {
-          definition.getField().forEach(
-              field ->
-                  fields.put(field.getName(), field)
-          );
-        }
-      });
+      parentTypeInfos.forEach(
+          typeInfo -> {
+            DataTypeDefinition definition = typeInfo.getTypeNode().getDefinition();
+            if (definition != null) {
+              definition.getField().forEach(field -> fields.put(field.getName(), field));
+            }
+          });
 
       inheritedFields = List.copyOf(fields.values());
     }
 
     return inheritedFields;
   }
-
 }

@@ -1,10 +1,9 @@
 package com.digitalpetri.opcua.uanodeset.util;
 
+import com.digitalpetri.opcua.uanodeset.parser.IndexUtil;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Matcher;
-
-import com.digitalpetri.opcua.uanodeset.parser.IndexUtil;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 
 public final class NodeIdUtil {
@@ -12,15 +11,17 @@ public final class NodeIdUtil {
   private static final ConcurrentMap<NodeId, String> STRING_VALUES = new ConcurrentHashMap<>();
 
   public static String get(NodeId nodeId) {
-    return STRING_VALUES.computeIfAbsent(nodeId, id -> {
-      String s = id.toParseableString();
-      if (s.startsWith("ns=0;")) {
-        int index = s.indexOf(";");
-        return s.substring(index + 1);
-      } else {
-        return s;
-      }
-    });
+    return STRING_VALUES.computeIfAbsent(
+        nodeId,
+        id -> {
+          String s = id.toParseableString();
+          if (s.startsWith("ns=0;")) {
+            int index = s.indexOf(";");
+            return s.substring(index + 1);
+          } else {
+            return s;
+          }
+        });
   }
 
   public static boolean equals(NodeId nodeId, String nodeIdString) {
@@ -50,5 +51,4 @@ public final class NodeIdUtil {
   }
 
   private NodeIdUtil() {}
-
 }

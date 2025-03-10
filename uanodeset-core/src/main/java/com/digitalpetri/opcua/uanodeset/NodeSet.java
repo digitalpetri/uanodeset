@@ -17,15 +17,16 @@ import org.opcfoundation.ua.*;
 
 /**
  * Holds a UANodeSet and does some post-processing to make it a little more usable.
+ *
  * <ul>
- * <li>The URI table contains the base OPC UA namespace URI and the UANodeSet contains the base
- * OPC UA model
- * <li>Fields containing NodeIds are replaced with NodeIds that have had any potential alias
- * resolved
- * <li>RolePermissions and AccessRestrictions defined at the model level have been applied to
- * individual UANodes
- * <li>Implicit References are created for all References that are not explicitly defined in the
- * UANodeSet
+ *   <li>The URI table contains the base OPC UA namespace URI and the UANodeSet contains the base
+ *       OPC UA model
+ *   <li>Fields containing NodeIds are replaced with NodeIds that have had any potential alias
+ *       resolved
+ *   <li>RolePermissions and AccessRestrictions defined at the model level have been applied to
+ *       individual UANodes
+ *   <li>Implicit References are created for all References that are not explicitly defined in the
+ *       UANodeSet
  * </ul>
  */
 public class NodeSet implements NodeSetContext {
@@ -44,8 +45,8 @@ public class NodeSet implements NodeSetContext {
    *
    * <p>This UANodeSet must contain the base OPC UA model.
    *
-   * <p>Typically, this will be a merged UANodeSet containing the base model and some other
-   * model(s) that are being loaded into an address space or fed to a code generator.
+   * <p>Typically, this will be a merged UANodeSet containing the base model and some other model(s)
+   * that are being loaded into an address space or fed to a code generator.
    *
    * @param nodeSet the UANodeSet to create a NodeSet from.
    */
@@ -57,10 +58,7 @@ public class NodeSet implements NodeSetContext {
 
     AliasTable aliasTable = nodeSet.getAliases();
     if (aliasTable != null) {
-      aliasTable.getAlias().forEach(
-          nia ->
-              aliases.put(nia.getAlias(), nia.getValue())
-      );
+      aliasTable.getAlias().forEach(nia -> aliases.put(nia.getAlias(), nia.getValue()));
     }
 
     UriTable namespaceUris = nodeSet.getNamespaceUris();
@@ -73,97 +71,96 @@ public class NodeSet implements NodeSetContext {
     var rolePermissionsByModelUri = new HashMap<String, Optional<ListOfRolePermissions>>();
     var accessRestrictionsByModelUri = new HashMap<String, Optional<Integer>>();
 
-    nodeSet.getUAObjectOrUAVariableOrUAMethod().forEach(node -> {
-      node.setNodeId(resolveAlias(node.getNodeId()));
+    nodeSet
+        .getUAObjectOrUAVariableOrUAMethod()
+        .forEach(
+            node -> {
+              node.setNodeId(resolveAlias(node.getNodeId()));
 
-      if (node instanceof UADataType dataType) {
-        DataTypeDefinition definition = dataType.getDefinition();
+              if (node instanceof UADataType dataType) {
+                DataTypeDefinition definition = dataType.getDefinition();
 
-        if (definition != null) {
-          definition.getField().forEach(
-              field ->
-                  field.setDataType(resolveAlias(field.getDataType()))
-          );
-        }
-      }
-
-      if (node instanceof UAVariable variable) {
-        variable.setDataType(resolveAlias(variable.getDataType()));
-      }
-
-      if (node instanceof UAVariableType variableType) {
-        variableType.setDataType(resolveAlias(variableType.getDataType()));
-      }
-
-      // TODO other nodes with aliases that need resolving?
-
-      // Maybe set RolePermissions from the model
-      if (!node.isHasNoPermissions()) {
-        ListOfRolePermissions nodeRolePermissions = node.getRolePermissions();
-
-        if (nodeRolePermissions == null ||
-            nodeRolePermissions.getRolePermission().isEmpty()) {
-
-          Optional<ListOfRolePermissions> modelRolePermissions =
-              rolePermissionsByModelUri.computeIfAbsent(
-                  getNamespaceUri(node.getNodeId()),
-                  namespaceUri -> {
-                    Optional<ModelTableEntry> modelTableEntry = nodeSet.getModels()
-                        .getModel()
-                        .stream()
-                        .filter(e -> namespaceUri.equals(e.getModelUri()))
-                        .findFirst();
-
-                    return modelTableEntry.flatMap(
-                        e -> Optional.ofNullable(e.getRolePermissions()));
-                  }
-              );
-
-          modelRolePermissions.ifPresent(node::setRolePermissions);
-        }
-      }
-
-      // Maybe set AccessRestrictions from the model
-      if (node.getAccessRestrictions() == null) {
-        Optional<Integer> modelAccessRestrictions =
-            accessRestrictionsByModelUri.computeIfAbsent(
-                getNamespaceUri(node.getNodeId()),
-                namespaceUri -> {
-                  Optional<ModelTableEntry> modelTableEntry = nodeSet.getModels()
-                      .getModel()
-                      .stream()
-                      .filter(e -> namespaceUri.equals(e.getModelUri()))
-                      .findFirst();
-
-                  return modelTableEntry.flatMap(
-                      e -> Optional.of(e.getAccessRestrictions()));
+                if (definition != null) {
+                  definition
+                      .getField()
+                      .forEach(field -> field.setDataType(resolveAlias(field.getDataType())));
                 }
-            );
+              }
 
-        modelAccessRestrictions.ifPresent(node::setAccessRestrictions);
-      }
+              if (node instanceof UAVariable variable) {
+                variable.setDataType(resolveAlias(variable.getDataType()));
+              }
 
-      nodeMap.put(node.getNodeId(), node);
+              if (node instanceof UAVariableType variableType) {
+                variableType.setDataType(resolveAlias(variableType.getDataType()));
+              }
 
-      ListOfReferences references = node.getReferences();
+              // TODO other nodes with aliases that need resolving?
 
-      // resolve Reference aliases and add explicit/implicit References
-      if (references != null) {
-        references.getReference().forEach(
-            reference -> {
-              reference.setValue(resolveAlias(reference.getValue()));
-              reference.setReferenceType(resolveAlias(reference.getReferenceType()));
-              explicitReferences.put(node.getNodeId(), reference);
+              // Maybe set RolePermissions from the model
+              if (!node.isHasNoPermissions()) {
+                ListOfRolePermissions nodeRolePermissions = node.getRolePermissions();
 
-              var inverse = new Reference();
-              inverse.setValue(node.getNodeId());
-              inverse.setIsForward(!reference.isIsForward());
-              inverse.setReferenceType(reference.getReferenceType());
-              implicitReferences.put(reference.getValue(), inverse);
-            }
-        );
-      }
-    });
+                if (nodeRolePermissions == null
+                    || nodeRolePermissions.getRolePermission().isEmpty()) {
+
+                  Optional<ListOfRolePermissions> modelRolePermissions =
+                      rolePermissionsByModelUri.computeIfAbsent(
+                          getNamespaceUri(node.getNodeId()),
+                          namespaceUri -> {
+                            Optional<ModelTableEntry> modelTableEntry =
+                                nodeSet.getModels().getModel().stream()
+                                    .filter(e -> namespaceUri.equals(e.getModelUri()))
+                                    .findFirst();
+
+                            return modelTableEntry.flatMap(
+                                e -> Optional.ofNullable(e.getRolePermissions()));
+                          });
+
+                  modelRolePermissions.ifPresent(node::setRolePermissions);
+                }
+              }
+
+              // Maybe set AccessRestrictions from the model
+              if (node.getAccessRestrictions() == null) {
+                Optional<Integer> modelAccessRestrictions =
+                    accessRestrictionsByModelUri.computeIfAbsent(
+                        getNamespaceUri(node.getNodeId()),
+                        namespaceUri -> {
+                          Optional<ModelTableEntry> modelTableEntry =
+                              nodeSet.getModels().getModel().stream()
+                                  .filter(e -> namespaceUri.equals(e.getModelUri()))
+                                  .findFirst();
+
+                          return modelTableEntry.flatMap(
+                              e -> Optional.of(e.getAccessRestrictions()));
+                        });
+
+                modelAccessRestrictions.ifPresent(node::setAccessRestrictions);
+              }
+
+              nodeMap.put(node.getNodeId(), node);
+
+              ListOfReferences references = node.getReferences();
+
+              // resolve Reference aliases and add explicit/implicit References
+              if (references != null) {
+                references
+                    .getReference()
+                    .forEach(
+                        reference -> {
+                          reference.setValue(resolveAlias(reference.getValue()));
+                          reference.setReferenceType(resolveAlias(reference.getReferenceType()));
+                          explicitReferences.put(node.getNodeId(), reference);
+
+                          var inverse = new Reference();
+                          inverse.setValue(node.getNodeId());
+                          inverse.setIsForward(!reference.isIsForward());
+                          inverse.setReferenceType(reference.getReferenceType());
+                          implicitReferences.put(reference.getValue(), inverse);
+                        });
+              }
+            });
   }
 
   @Override
@@ -222,8 +219,7 @@ public class NodeSet implements NodeSetContext {
                 .map(ReferenceEquivalence.INSTANCE::wrap)
                 .forEach(combined::add);
             return combined.stream().map(Equivalence.Wrapper::get).collect(Collectors.toList());
-          }
-      );
+          });
     }
 
     private static class ReferenceEquivalence extends Equivalence<Reference> {
@@ -232,19 +228,17 @@ public class NodeSet implements NodeSetContext {
 
       @Override
       protected boolean doEquivalent(Reference a, Reference b) {
-        return Objects.equals(a.getValue(), b.getValue()) &&
-            Objects.equals(a.getReferenceType(), b.getReferenceType()) &&
-            Objects.equals(a.isIsForward(), b.isIsForward());
+        return Objects.equals(a.getValue(), b.getValue())
+            && Objects.equals(a.getReferenceType(), b.getReferenceType())
+            && Objects.equals(a.isIsForward(), b.isIsForward());
       }
 
       @Override
       protected int doHash(Reference reference) {
-        return Objects.hash(reference.getReferenceType(), reference.getValue(),
-            reference.isIsForward());
+        return Objects.hash(
+            reference.getReferenceType(), reference.getValue(), reference.isIsForward());
       }
-
     }
-
   }
 
   public static NodeSet load(InputStream inputStream) throws JAXBException {

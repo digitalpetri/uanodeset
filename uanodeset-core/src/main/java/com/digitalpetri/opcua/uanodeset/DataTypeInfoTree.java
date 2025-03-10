@@ -75,8 +75,9 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
     } else {
       TypeInfo<UADataType> typeInfo = getTypeInfo(nodeId);
 
-      return typeInfo != null && typeInfo.getParent() != null &&
-          isStructure(typeInfo.getParent().getTypeNode().getNodeId());
+      return typeInfo != null
+          && typeInfo.getParent() != null
+          && isStructure(typeInfo.getParent().getTypeNode().getNodeId());
     }
   }
 
@@ -85,8 +86,8 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
    * fields.
    *
    * @param nodeId the NodeId of the UADataType to check.
-   * @return {@code true} if the UADataType is a structure with one or more optional fields,
-   * {@code false} otherwise.
+   * @return {@code true} if the UADataType is a structure with one or more optional fields, {@code
+   *     false} otherwise.
    */
   public boolean isStructureWithOptionalFields(NodeId nodeId) {
     return isStructureWithOptionalFields(NodeIdUtil.get(nodeId));
@@ -97,8 +98,8 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
    * fields.
    *
    * @param nodeId the NodeId of the UADataType to check.
-   * @return {@code true} if the UADataType is a structure with one or more optional fields,
-   * {@code false} otherwise.
+   * @return {@code true} if the UADataType is a structure with one or more optional fields, {@code
+   *     false} otherwise.
    */
   public boolean isStructureWithOptionalFields(String nodeId) {
     DataTypeInfo typeInfo = getTypeInfo(nodeId);
@@ -106,10 +107,8 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
     if (typeInfo == null) {
       return false;
     } else {
-      Stream<DataTypeField> fields = Stream.concat(
-          typeInfo.getFields().stream(),
-          typeInfo.getInheritedFields().stream()
-      );
+      Stream<DataTypeField> fields =
+          Stream.concat(typeInfo.getFields().stream(), typeInfo.getInheritedFields().stream());
 
       return fields.anyMatch(DataTypeField::isIsOptional);
     }
@@ -121,7 +120,7 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
    *
    * @param nodeId the NodeId of the UADataType to check.
    * @return {@code true} if the UADataType is a structure with one or more fields that allow
-   * subtypes, {@code false} otherwise.
+   *     subtypes, {@code false} otherwise.
    */
   public boolean isStructureWithSubtypedValues(NodeId nodeId) {
     return isStructureWithSubtypedValues(NodeIdUtil.get(nodeId));
@@ -133,7 +132,7 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
    *
    * @param nodeId the NodeId of the UADataType to check.
    * @return {@code true} if the UADataType is a structure with one or more fields that allow
-   * subtypes, {@code false} otherwise.
+   *     subtypes, {@code false} otherwise.
    */
   public boolean isStructureWithSubtypedValues(String nodeId) {
     DataTypeInfo typeInfo = getTypeInfo(nodeId);
@@ -141,10 +140,8 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
     if (typeInfo == null) {
       return false;
     } else {
-      Stream<DataTypeField> fields = Stream.concat(
-          typeInfo.getFields().stream(),
-          typeInfo.getInheritedFields().stream()
-      );
+      Stream<DataTypeField> fields =
+          Stream.concat(typeInfo.getFields().stream(), typeInfo.getInheritedFields().stream());
 
       return fields.anyMatch(DataTypeField::isAllowSubTypes);
     }
@@ -157,9 +154,9 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
   public boolean isOptionSet(String nodeId) {
     TypeInfo<UADataType> typeInfo = getTypeInfo(nodeId);
 
-    return typeInfo != null &&
-        typeInfo.getTypeNode().getDefinition().isIsOptionSet() && isSubtypeOf(nodeId,
-        NodeIds.OptionSet);
+    return typeInfo != null
+        && typeInfo.getTypeNode().getDefinition().isIsOptionSet()
+        && isSubtypeOf(nodeId, NodeIds.OptionSet);
   }
 
   public boolean isOptionSetUInteger(NodeId nodeId) {
@@ -169,9 +166,9 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
   public boolean isOptionSetUInteger(String nodeId) {
     TypeInfo<UADataType> typeInfo = getTypeInfo(nodeId);
 
-    return typeInfo != null &&
-        typeInfo.getTypeNode().getDefinition().isIsOptionSet() && isSubtypeOf(nodeId,
-        NodeIds.UInteger);
+    return typeInfo != null
+        && typeInfo.getTypeNode().getDefinition().isIsOptionSet()
+        && isSubtypeOf(nodeId, NodeIds.UInteger);
   }
 
   public boolean isUnion(NodeId nodeId) {
@@ -181,8 +178,9 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
   public boolean isUnion(String nodeId) {
     TypeInfo<UADataType> typeInfo = getTypeInfo(nodeId);
 
-    return typeInfo != null &&
-        typeInfo.getTypeNode().getDefinition().isIsUnion() && isSubtypeOf(nodeId, NodeIds.Union);
+    return typeInfo != null
+        && typeInfo.getTypeNode().getDefinition().isIsUnion()
+        && isSubtypeOf(nodeId, NodeIds.Union);
   }
 
   public boolean isUnionWithSubtypedValues(NodeId nodeId) {
@@ -198,8 +196,9 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
       Stream<DataTypeField> fields =
           Stream.concat(typeInfo.getFields().stream(), typeInfo.getInheritedFields().stream());
 
-      return typeInfo.getTypeNode().getDefinition().isIsUnion() &&
-          isSubtypeOf(nodeId, NodeIds.Union) && fields.anyMatch(DataTypeField::isAllowSubTypes);
+      return typeInfo.getTypeNode().getDefinition().isIsUnion()
+          && isSubtypeOf(nodeId, NodeIds.Union)
+          && fields.anyMatch(DataTypeField::isAllowSubTypes);
     }
   }
 
@@ -220,12 +219,14 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
   private static void addChildren(NodeSetContext context, DataTypeInfo typeInfo, int level) {
     List<Reference> references = context.getReferences(typeInfo.getTypeNode().getNodeId());
 
-    List<UADataType> subTypes = references.stream()
-        .filter(r -> r.isIsForward() && NodeIdUtil.equals(NodeIds.HasSubtype, r.getReferenceType()))
-        .map(r -> context.getNode(r.getValue()))
-        .filter(n -> n instanceof UADataType)
-        .map(n -> (UADataType) n)
-        .toList();
+    List<UADataType> subTypes =
+        references.stream()
+            .filter(
+                r -> r.isIsForward() && NodeIdUtil.equals(NodeIds.HasSubtype, r.getReferenceType()))
+            .map(r -> context.getNode(r.getValue()))
+            .filter(n -> n instanceof UADataType)
+            .map(n -> (UADataType) n)
+            .toList();
 
     for (UADataType dataType : subTypes) {
       if (DEBUG) {
@@ -241,5 +242,4 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
       addChildren(context, child, level + 1);
     }
   }
-
 }
