@@ -8,16 +8,17 @@ import com.digitalpetri.opcua.uanodeset.DataTypeInfo;
 import com.digitalpetri.opcua.uanodeset.DataTypeInfoTree;
 import com.digitalpetri.opcua.uanodeset.NodeSet;
 import com.digitalpetri.opcua.uanodeset.parser.IndexUtil;
-import com.digitalpetri.opcua.uanodeset.util.NodeIdUtil;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBElement;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Marshaller;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.stream.Stream;
@@ -40,7 +41,9 @@ import org.eclipse.milo.opcua.sdk.server.nodes.UaReferenceTypeNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableTypeNode;
 import org.eclipse.milo.opcua.sdk.server.nodes.UaViewNode;
-import org.eclipse.milo.opcua.stack.core.NodeIds;
+import org.eclipse.milo.opcua.stack.core.StatusCodes;
+import org.eclipse.milo.opcua.stack.core.UaSerializationException;
+import org.eclipse.milo.opcua.stack.core.encoding.DataTypeCodec;
 import org.eclipse.milo.opcua.stack.core.encoding.EncodingContext;
 import org.eclipse.milo.opcua.stack.core.encoding.binary.OpcUaDefaultBinaryEncoding;
 import org.eclipse.milo.opcua.stack.core.encoding.xml.OpcUaXmlDecoder;
@@ -52,6 +55,7 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName;
 import org.eclipse.milo.opcua.stack.core.types.builtin.StatusCode;
 import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
+import org.eclipse.milo.opcua.stack.core.types.builtin.XmlElement;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.StructureType;
 import org.eclipse.milo.opcua.stack.core.types.structured.AccessLevelExType;
@@ -86,6 +90,7 @@ import org.opcfoundation.ua.UAView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
 public class NodeSetNodeLoader {
 
@@ -109,6 +114,22 @@ public class NodeSetNodeLoader {
   }
 
   public void loadNodes() {
+    // Add references for all nodes.
+    for (UANode node : nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod()) {
+      String nodeId = resolveAlias(node.getNodeId());
+      String namespaceUri =
+          nodeSet.getNodeSet().getNamespaceUris().getUri().get(getNamespaceIndex(nodeId));
+
+      if (namespaceFilter.test(namespaceUri)) {
+        for (Reference reference : node.getReferences().getReference()) {
+          org.eclipse.milo.opcua.sdk.core.Reference ref = reindexReference(node, reference);
+
+          context.getNodeManager().addReferences(ref, context.getServer().getNamespaceTable());
+        }
+      }
+    }
+
+    // Build all type nodes.
     for (UANode node : nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod()) {
       String nodeId = resolveAlias(node.getNodeId());
       String namespaceUri =
@@ -134,9 +155,6 @@ public class NodeSetNodeLoader {
         }
       }
     }
-
-    context.getServer().updateDataTypeTree();
-    context.getServer().updateReferenceTypeTree();
 
     // Build all other node types.
     for (UANode node : nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod()) {
@@ -165,20 +183,8 @@ public class NodeSetNodeLoader {
       }
     }
 
-    // Add references to all nodes.
-    for (UANode node : nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod()) {
-      String nodeId = resolveAlias(node.getNodeId());
-      String namespaceUri =
-          nodeSet.getNodeSet().getNamespaceUris().getUri().get(getNamespaceIndex(nodeId));
-
-      if (namespaceFilter.test(namespaceUri)) {
-        for (Reference reference : node.getReferences().getReference()) {
-          org.eclipse.milo.opcua.sdk.core.Reference ref = reindexReference(node, reference);
-
-          context.getNodeManager().addReferences(ref, context.getServer().getNamespaceTable());
-        }
-      }
-    }
+    context.getServer().updateDataTypeTree();
+    context.getServer().updateReferenceTypeTree();
 
     // Set DataTypeDefinitions for all DataTypes.
     DataTypeInfoTree dataTypeTree = DataTypeInfoTree.create(nodeSet);
@@ -192,14 +198,59 @@ public class NodeSetNodeLoader {
         if (node instanceof UADataType dataType) {
           UaDataTypeNode dataTypeNode =
               (UaDataTypeNode)
-                  context
-                      .getNodeManager()
-                      .getNode(reindexNodeId(dataType.getNodeId()))
-                      .orElseThrow();
+                  context.getNodeManager().getNode(reindexNodeId(nodeId)).orElseThrow();
 
           dataTypeNode.setDataTypeDefinition(newDataTypeDefinition(dataType, dataTypeTree));
 
           registerDynamicDataType(dataTypeNode.getNodeId());
+        }
+      }
+    }
+
+    // Set values for all Variable and VariableType nodes.
+    for (UANode node : nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod()) {
+      String nodeId = resolveAlias(node.getNodeId());
+      String namespaceUri =
+          nodeSet.getNodeSet().getNamespaceUris().getUri().get(getNamespaceIndex(nodeId));
+
+      if (namespaceFilter.test(namespaceUri)) {
+        if (node instanceof UAVariable variable) {
+          if (variable.getValue() != null) {
+            Object any = variable.getValue().getAny();
+
+            try {
+              Variant value = decodeXmlValue(variable.getDataType(), any);
+
+              UaVariableNode variableNode =
+                  (UaVariableNode)
+                      context.getNodeManager().getNode(reindexNodeId(nodeId)).orElseThrow();
+
+              variableNode.setValue(new DataValue(value, StatusCode.GOOD, DateTime.now()));
+            } catch (Exception e) {
+              logger.warn("Failed to decode XML value for Variable: {}", nodeId, e);
+            }
+          }
+        } else if (node instanceof UAVariableType variableType) {
+          if (variableType.getValue() != null) {
+            Object any = variableType.getValue().getAny();
+
+            try {
+              Variant value = decodeXmlValue(variableType.getDataType(), any);
+
+              UaVariableTypeNode variableTypeNode =
+                  (UaVariableTypeNode)
+                      context
+                          .getNodeManager()
+                          .getNode(reindexNodeId(variableType.getNodeId()))
+                          .orElseThrow();
+
+              variableTypeNode.setValue(
+                  new DataValue(value, StatusCode.GOOD, null, DateTime.now()));
+            } catch (Exception e) {
+              logger.warn(
+                  "Failed to decode XML value for VariableType: {}", variableType.getNodeId(), e);
+            }
+          }
         }
       }
     }
@@ -328,16 +379,6 @@ public class NodeSetNodeLoader {
   private UaNode buildVariableNode(UAVariable variable) {
     Variant value = Variant.NULL_VALUE;
 
-    if (variable.getValue() != null) {
-      Object any = variable.getValue().getAny();
-
-      try {
-        value = decodeXmlValue(variable.getDataType(), any);
-      } catch (Exception e) {
-        logger.warn("Failed to decode XML value for Variable: {}", variable.getNodeId(), e);
-      }
-    }
-
     NodeId typeDefinitionId = NodeId.NULL_VALUE;
 
     List<Reference> references = nodeSet.getExplicitReferences(variable.getNodeId());
@@ -411,16 +452,6 @@ public class NodeSetNodeLoader {
 
   private UaNode buildVariableTypeNode(UAVariableType variableType) {
     Variant value = Variant.NULL_VALUE;
-
-    if (variableType.getValue() != null) {
-      Object any = variableType.getValue().getAny();
-
-      try {
-        value = decodeXmlValue(variableType.getDataType(), any);
-      } catch (Exception e) {
-        logger.warn("Failed to decode XML value for VariableType: {}", variableType.getNodeId(), e);
-      }
-    }
 
     return new UaVariableTypeNode(
         context,
@@ -540,29 +571,43 @@ public class NodeSetNodeLoader {
     Object valueObject = decoder.readVariantValue();
 
     if (valueObject instanceof ExtensionObject xo) {
-      List<Reference> hasEncodingReferences =
-          nodeSet.getExplicitReferences(dataTypeId).stream()
-              .filter(
-                  r ->
-                      r.isIsForward()
-                          && NodeIdUtil.equals(r.getReferenceType(), NodeIds.HasEncoding))
-              .toList();
+      // Transcode the ExtensionObject from its XML encoding to Binary encoding.
+      // We have to roll our own transcoding instead of using ExtensionObject::transcode
+      // so that we can use the OpcUaXmlDecoder declared above, which is set up for reindexing.
 
       try {
-        String encodingId =
-            hasEncodingReferences.stream()
-                .map(r -> nodeSet.getNode(r.getValue()))
-                .filter(Objects::nonNull)
-                .filter(n -> n.getBrowseName().equals("Default Binary"))
-                .map(UANode::getNodeId)
-                .findFirst()
-                .orElseThrow();
+        DataType dataType =
+            context.getServer().getDataTypeTree().getDataType(reindexNodeId(dataTypeId));
 
-        valueObject =
-            xo.transcode(
-                encodingContext,
-                reindexNodeId(encodingId),
-                OpcUaDefaultBinaryEncoding.getInstance());
+        if (dataType == null) {
+          throw new IllegalStateException("DataType not found for NodeId: " + dataTypeId);
+        }
+
+        DataTypeCodec codec = encodingContext.getDataTypeManager().getCodec(xo.getEncodingId());
+
+        if (codec != null) {
+          XmlElement xmlBody = (XmlElement) xo.getBody();
+          String xml = xmlBody.getFragmentOrEmpty();
+
+          try {
+            decoder.setInput(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+          } catch (IOException | SAXException e) {
+            throw new UaSerializationException(StatusCodes.Bad_DecodingError, e);
+          }
+
+          Object decoded = decoder.decodeStruct(null, codec);
+
+          valueObject =
+              ExtensionObject.encode(
+                  encodingContext,
+                  decoded,
+                  dataType.getBinaryEncodingId(),
+                  OpcUaDefaultBinaryEncoding.getInstance());
+        } else {
+          throw new UaSerializationException(
+              StatusCodes.Bad_DecodingError,
+              "no codec registered for encodingId=" + xo.getEncodingId());
+        }
       } catch (Exception e) {
         logger.warn("Failed to transcode ExtensionObject: {}", xo, e);
       }
