@@ -2,12 +2,13 @@ package com.digitalpetri.opcua.uanodeset.parser;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
-
 import org.eclipse.milo.opcua.stack.core.util.Namespaces;
 import org.opcfoundation.ua.ModelTable;
 import org.opcfoundation.ua.ModelTableEntry;
 import org.opcfoundation.ua.NodeIdAlias;
+import org.opcfoundation.ua.UANode;
 import org.opcfoundation.ua.UANodeSet;
 import org.opcfoundation.ua.UriTable;
 
@@ -37,35 +38,39 @@ public final class UANodeSetMerger {
         return baseNodeSet;
     }
 
-    private static void mergeNamespaceUris(UANodeSet baseNodeSet, UANodeSet incomingNodeSet) {
-        UriTable baseTable = baseNodeSet.getNamespaceUris();
-        if (baseTable == null) {
-            baseTable = new UriTable();
-            baseTable.getUri().add(Namespaces.OPC_UA);
-            baseNodeSet.setNamespaceUris(baseTable);
-        }
+  private static void mergeNamespaceUris(UANodeSet baseNodeSet, UANodeSet incomingNodeSet) {
+    UriTable baseTable = baseNodeSet.getNamespaceUris();
+    if (baseTable == null) {
+      baseTable = new UriTable();
+      baseTable.getUri().add(Namespaces.OPC_UA);
+      baseNodeSet.setNamespaceUris(baseTable);
+    }
+    if (!baseTable.getUri().isEmpty() && !baseTable.getUri().get(0).equals(Namespaces.OPC_UA)) {
+      baseTable.getUri().add(0, Namespaces.OPC_UA);
+    }
 
-        UriTable incomingTable = Objects.requireNonNullElseGet(
+    UriTable incomingTable =
+        Objects.requireNonNullElseGet(
             incomingNodeSet.getNamespaceUris(),
             () -> {
-                UriTable uriTable = new UriTable();
-                uriTable.getUri().add(Namespaces.OPC_UA);
-                incomingNodeSet.setNamespaceUris(uriTable);
-                return uriTable;
-            }
-        );
-        if (!incomingTable.getUri().isEmpty() &&
-            !incomingTable.getUri().get(0).equals(Namespaces.OPC_UA)) {
+              UriTable uriTable = new UriTable();
+              uriTable.getUri().add(Namespaces.OPC_UA);
+              incomingNodeSet.setNamespaceUris(uriTable);
+              return uriTable;
+            });
 
-            incomingTable.getUri().add(0, Namespaces.OPC_UA);
-        }
+    if (!incomingTable.getUri().isEmpty()
+        && !incomingTable.getUri().get(0).equals(Namespaces.OPC_UA)) {
 
-        for (String uri : incomingTable.getUri()) {
-            if (!baseTable.getUri().contains(uri)) {
-                baseTable.getUri().add(uri);
-            }
-        }
+      incomingTable.getUri().add(0, Namespaces.OPC_UA);
     }
+
+    for (String uri : incomingTable.getUri()) {
+      if (!baseTable.getUri().contains(uri)) {
+        baseTable.getUri().add(uri);
+      }
+    }
+  }
 
     private static void mergeModels(UANodeSet baseNodeSet, UANodeSet incomingNodeSet) {
         ModelTable baseModelTable = baseNodeSet.getModels();
@@ -124,16 +129,25 @@ public final class UANodeSetMerger {
         });
     }
 
-    private static void mergeNodes(UANodeSet baseNodeSet, UANodeSet incomingNodeSet) {
-        incomingNodeSet.getUAObjectOrUAVariableOrUAMethod().forEach(node -> {
-            IndexUtil.reindexUANode(
-                node,
-                baseNodeSet.getNamespaceUris(),
-                incomingNodeSet.getNamespaceUris()
-            );
+  private static void mergeNodes(UANodeSet baseNodeSet, UANodeSet incomingNodeSet) {
+    Set<String> existingNodeIds =
+        baseNodeSet.getUAObjectOrUAVariableOrUAMethod().stream()
+            .map(UANode::getNodeId)
+            .collect(Collectors.toSet());
 
-            baseNodeSet.getUAObjectOrUAVariableOrUAMethod().add(node);
-        });
+    for (UANode node : incomingNodeSet.getUAObjectOrUAVariableOrUAMethod()) {
+      String nodeIdBeforeReindex = node.getNodeId();
+
+      IndexUtil.reindexUANode(
+          node, baseNodeSet.getNamespaceUris(), incomingNodeSet.getNamespaceUris());
+
+      if (existingNodeIds.contains(node.getNodeId())) {
+        System.err.println(
+            "Duplicate node, before=" + nodeIdBeforeReindex + " after=" + node.getNodeId());
+      } else {
+        baseNodeSet.getUAObjectOrUAVariableOrUAMethod().add(node);
+        existingNodeIds.add(node.getNodeId());
+      }
     }
-
+  }
 }
