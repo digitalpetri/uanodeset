@@ -583,7 +583,8 @@ public class NodeSetNodeLoader {
           throw new IllegalStateException("DataType not found for NodeId: " + dataTypeId);
         }
 
-        DataTypeCodec codec = encodingContext.getDataTypeManager().getCodec(xo.getEncodingId());
+        DataTypeCodec codec =
+            encodingContext.getDataTypeManager().getCodec(xo.getEncodingOrTypeId());
 
         if (codec != null) {
           XmlElement xmlBody = (XmlElement) xo.getBody();
@@ -597,16 +598,19 @@ public class NodeSetNodeLoader {
 
           Object decoded = decoder.decodeStruct(null, codec);
 
+          NodeId binaryEncodingId = dataType.getBinaryEncodingId();
+          assert binaryEncodingId != null;
+
           valueObject =
               ExtensionObject.encode(
                   encodingContext,
                   decoded,
-                  dataType.getBinaryEncodingId(),
+                  binaryEncodingId,
                   OpcUaDefaultBinaryEncoding.getInstance());
         } else {
           throw new UaSerializationException(
               StatusCodes.Bad_DecodingError,
-              "no codec registered for encodingId=" + xo.getEncodingId());
+              "no codec registered for encodingId=" + xo.getEncodingOrTypeId());
         }
       } catch (Exception e) {
         logger.warn("Failed to transcode ExtensionObject: {}", xo, e);
