@@ -568,7 +568,7 @@ public class NodeSetNodeLoader {
         };
 
     decoder.setInput(new StringReader(xmlString));
-    Object valueObject = decoder.readVariantValue();
+    Object valueObject = decoder.decodeVariantValue();
 
     if (valueObject instanceof ExtensionObject xo) {
       // Transcode the ExtensionObject from its XML encoding to Binary encoding.
