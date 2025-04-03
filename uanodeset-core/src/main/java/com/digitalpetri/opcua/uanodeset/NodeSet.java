@@ -12,7 +12,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 import org.eclipse.milo.opcua.stack.core.util.Namespaces;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.opcfoundation.ua.*;
 
 /**

@@ -67,7 +67,7 @@ import org.eclipse.milo.opcua.stack.core.types.structured.RolePermissionType;
 import org.eclipse.milo.opcua.stack.core.types.structured.StructureDefinition;
 import org.eclipse.milo.opcua.stack.core.types.structured.StructureField;
 import org.eclipse.milo.opcua.stack.core.util.SecureXmlUtil;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.opcfoundation.ua.AliasTable;
 import org.opcfoundation.ua.DataTypeDefinition;
 import org.opcfoundation.ua.DataTypeField;
@@ -706,7 +706,7 @@ public class NodeSetNodeLoader {
     return new AccessRestrictionType(ushort(value));
   }
 
-  private @Nullable org.eclipse.milo.opcua.stack.core.types.structured.DataTypeDefinition
+  private org.eclipse.milo.opcua.stack.core.types.structured.@Nullable DataTypeDefinition
       newDataTypeDefinition(UADataType dataType, DataTypeInfoTree dataTypeTree) {
 
     DataTypeDefinition definition = dataType.getDefinition();

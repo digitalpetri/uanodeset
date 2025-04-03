@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.opcfoundation.ua.DataTypeDefinition;
 import org.opcfoundation.ua.DataTypeField;
 import org.opcfoundation.ua.UADataType;

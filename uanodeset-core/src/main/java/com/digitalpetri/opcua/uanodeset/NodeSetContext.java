@@ -1,7 +1,7 @@
 package com.digitalpetri.opcua.uanodeset;
 
 import java.util.List;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.opcfoundation.ua.Reference;
 import org.opcfoundation.ua.UANode;
 import org.opcfoundation.ua.UANodeSet;
@@ -22,8 +22,7 @@ public interface NodeSetContext {
    * @return the {@link UANode} identified by {@code nodeId}, or {@code null} if no such node
    *     exists.
    */
-  @Nullable
-  UANode getNode(String nodeId);
+  @Nullable UANode getNode(String nodeId);
 
   /**
    * Get the {@link Reference}s for the {@link UANode} identified by {@code nodeId}.

@@ -4,7 +4,7 @@ import com.digitalpetri.opcua.uanodeset.util.NodeIdUtil;
 import java.util.HashMap;
 import java.util.Map;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.opcfoundation.ua.UAType;
 
 public abstract class TypeInfoTree<T extends UAType, N extends TypeInfo<T>> {
