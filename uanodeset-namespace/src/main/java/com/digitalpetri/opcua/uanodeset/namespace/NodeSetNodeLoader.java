@@ -200,9 +200,13 @@ public class NodeSetNodeLoader {
               (UaDataTypeNode)
                   context.getNodeManager().getNode(reindexNodeId(nodeId)).orElseThrow();
 
-          dataTypeNode.setDataTypeDefinition(newDataTypeDefinition(dataType, dataTypeTree));
+          var dataTypeDefinition = newDataTypeDefinition(dataType, dataTypeTree);
 
-          registerDynamicDataType(dataTypeNode.getNodeId());
+          if (dataTypeDefinition != null) {
+            dataTypeNode.setDataTypeDefinition(dataTypeDefinition);
+
+            registerDynamicDataType(dataTypeNode.getNodeId());
+          }
         }
       }
     }
@@ -702,14 +706,15 @@ public class NodeSetNodeLoader {
     return new AccessRestrictionType(ushort(value));
   }
 
-  private org.eclipse.milo.opcua.stack.core.types.structured.DataTypeDefinition
+  private @Nullable org.eclipse.milo.opcua.stack.core.types.structured.DataTypeDefinition
       newDataTypeDefinition(UADataType dataType, DataTypeInfoTree dataTypeTree) {
 
     DataTypeDefinition definition = dataType.getDefinition();
 
     if (definition == null) {
+      // This is expected for some DataTypes, e.g. simple/alias types.
       LoggerFactory.getLogger(getClass())
-          .warn(
+          .debug(
               "DataType {} has no DataTypeDefinition",
               getParseableIdentifier(dataType.getNodeId()));
       return null;
