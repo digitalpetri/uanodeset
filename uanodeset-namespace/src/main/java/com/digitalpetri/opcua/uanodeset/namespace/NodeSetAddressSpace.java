@@ -58,6 +58,15 @@ public abstract class NodeSetAddressSpace extends ManagedAddressSpaceFragmentWit
   }
 
   /**
+   * Get the {@link SubscriptionModel} used by this {@link NodeSetAddressSpace}.
+   *
+   * @return the {@link SubscriptionModel} used by this {@link NodeSetAddressSpace}.
+   */
+  public SubscriptionModel getSubscriptionModel() {
+    return subscriptionModel;
+  }
+
+  /**
    * Filter out nodes belonging to namespaces that should not be loaded.
    *
    * <p>UANodeSet files can contain nodes and references to nodes from other namespaces, but
