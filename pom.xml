@@ -109,9 +109,6 @@
                 <manifest>
                   <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                 </manifest>
-                <manifestEntries>
-                  <Automatic-Module-Name>${javaModuleName}</Automatic-Module-Name>
-                </manifestEntries>
               </archive>
             </configuration>
           </plugin>
@@ -183,9 +180,6 @@
             <manifest>
               <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
             </manifest>
-            <manifestEntries>
-              <Automatic-Module-Name>${javaModuleName}</Automatic-Module-Name>
-            </manifestEntries>
           </archive>
         </configuration>
       </plugin>

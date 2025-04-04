@@ -13,10 +13,6 @@
   <artifactId>uanodeset-core</artifactId>
   <version>0.2-SNAPSHOT</version>
 
-  <properties>
-    <javaModuleName>com.digitalpetri.opcua.uanodeset.core</javaModuleName>
-  </properties>
-
   <dependencies>
     <dependency>
       <groupId>org.eclipse.milo</groupId>

@@ -13,10 +13,6 @@
   <artifactId>uanodeset-namespace</artifactId>
   <version>0.2-SNAPSHOT</version>
 
-  <properties>
-    <javaModuleName>com.digitalpetri.opcua.uanodeset.namespace</javaModuleName>
-  </properties>
-
   <dependencies>
     <dependency>
       <groupId>com.digitalpetri.opcua</groupId>
