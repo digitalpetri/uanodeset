@@ -7,17 +7,17 @@
   <parent>
     <groupId>com.digitalpetri.opcua</groupId>
     <artifactId>uanodeset</artifactId>
-    <version>0.2-SNAPSHOT</version>
+    <version>0.3-SNAPSHOT</version>
   </parent>
 
   <artifactId>uanodeset-namespace</artifactId>
-  <version>0.2-SNAPSHOT</version>
+  <version>0.3-SNAPSHOT</version>
 
   <dependencies>
     <dependency>
       <groupId>com.digitalpetri.opcua</groupId>
       <artifactId>uanodeset-core</artifactId>
-      <version>0.2-SNAPSHOT</version>
+      <version>0.3-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.milo</groupId>
