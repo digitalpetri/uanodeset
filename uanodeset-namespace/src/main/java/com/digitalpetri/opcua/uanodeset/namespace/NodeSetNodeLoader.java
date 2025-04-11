@@ -45,8 +45,8 @@ import org.eclipse.milo.opcua.stack.core.StatusCodes;
 import org.eclipse.milo.opcua.stack.core.UaSerializationException;
 import org.eclipse.milo.opcua.stack.core.encoding.DataTypeCodec;
 import org.eclipse.milo.opcua.stack.core.encoding.EncodingContext;
-import org.eclipse.milo.opcua.stack.core.encoding.binary.OpcUaDefaultBinaryEncoding;
 import org.eclipse.milo.opcua.stack.core.encoding.xml.OpcUaXmlDecoder;
+import org.eclipse.milo.opcua.stack.core.types.UaStructuredType;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DateTime;
 import org.eclipse.milo.opcua.stack.core.types.builtin.ExpandedNodeId;
@@ -600,17 +600,12 @@ public class NodeSetNodeLoader {
             throw new UaSerializationException(StatusCodes.Bad_DecodingError, e);
           }
 
-          Object decoded = decoder.decodeStruct(null, codec);
+          UaStructuredType decoded = decoder.decodeStruct(null, codec);
 
           NodeId binaryEncodingId = dataType.getBinaryEncodingId();
           assert binaryEncodingId != null;
 
-          valueObject =
-              ExtensionObject.encode(
-                  encodingContext,
-                  decoded,
-                  binaryEncodingId,
-                  OpcUaDefaultBinaryEncoding.getInstance());
+          valueObject = ExtensionObject.encode(encodingContext, decoded);
         } else {
           throw new UaSerializationException(
               StatusCodes.Bad_DecodingError,
