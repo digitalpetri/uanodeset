@@ -96,6 +96,9 @@ public class NodeSetNodeLoader {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  private final JAXBContext jaxbContext;
+  private final Marshaller marshaller;
+
   private final NodeSet nodeSet;
   private final UaNodeContext context;
   private final EncodingContext encodingContext;
@@ -111,6 +114,13 @@ public class NodeSetNodeLoader {
     this.context = context;
     this.encodingContext = encodingContext;
     this.namespaceFilter = namespaceFilter;
+
+    try {
+      jaxbContext = JAXBContext.newInstance(ObjectFactory.class);
+      marshaller = jaxbContext.createMarshaller();
+    } catch (JAXBException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   public void loadNodes() {
@@ -510,9 +520,6 @@ public class NodeSetNodeLoader {
   }
 
   private Variant decodeXmlValue(String dataTypeId, Object value) throws Exception {
-    JAXBContext jaxbContext = JAXBContext.newInstance(ObjectFactory.class);
-    Marshaller marshaller = jaxbContext.createMarshaller();
-
     StringWriter sw = new StringWriter();
     if (value instanceof JAXBElement<?> jaxbElement) {
       try {
