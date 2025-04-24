@@ -22,12 +22,12 @@
     <dependency>
       <groupId>org.eclipse.milo</groupId>
       <artifactId>milo-sdk-server</artifactId>
-      <version>1.0.0-SNAPSHOT</version>
+      <version>${milo.version}</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.milo</groupId>
       <artifactId>milo-encoding-xml</artifactId>
-      <version>1.0.0-SNAPSHOT</version>
+      <version>${milo.version}</version>
     </dependency>
   </dependencies>
 
