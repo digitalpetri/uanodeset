@@ -9,9 +9,8 @@ module com.digitalpetri.opcua.uanodeset.core {
 
   exports com.digitalpetri.opcua.uanodeset.parser;
 
-  requires com.google.common;
   requires jakarta.xml.bind;
   requires org.glassfish.jaxb.runtime;
-  requires org.eclipse.milo.opcua.stack.core;
+  requires transitive org.eclipse.milo.opcua.stack.core;
   requires org.jspecify;
 }
