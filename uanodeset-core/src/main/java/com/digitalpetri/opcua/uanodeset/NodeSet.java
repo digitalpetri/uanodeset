@@ -3,14 +3,11 @@ package com.digitalpetri.opcua.uanodeset;
 import com.digitalpetri.opcua.uanodeset.parser.IndexUtil;
 import com.digitalpetri.opcua.uanodeset.parser.UANodeSetMerger;
 import com.digitalpetri.opcua.uanodeset.parser.UANodeSetParser;
-import com.google.common.base.Equivalence;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
+
 import jakarta.xml.bind.JAXBException;
 import java.io.InputStream;
 import java.util.*;
 import java.util.regex.Matcher;
-import java.util.stream.Collectors;
 import org.eclipse.milo.opcua.stack.core.util.Namespaces;
 import org.jspecify.annotations.Nullable;
 import org.opcfoundation.ua.*;
@@ -35,8 +32,8 @@ public class NodeSet implements NodeSetContext {
   private final Map<String, UANode> nodeMap = new HashMap<>();
 
   private final CombinedReferences combinedReferences = new CombinedReferences();
-  private final ListMultimap<String, Reference> explicitReferences = ArrayListMultimap.create();
-  private final ListMultimap<String, Reference> implicitReferences = ArrayListMultimap.create();
+  private final Map<String, List<Reference>> explicitReferences = new HashMap<>(); 
+  private final Map<String, List<Reference>> implicitReferences = new HashMap<>(); 
 
   private final UANodeSet nodeSet;
 
@@ -151,13 +148,12 @@ public class NodeSet implements NodeSetContext {
                         reference -> {
                           reference.setValue(resolveAlias(reference.getValue()));
                           reference.setReferenceType(resolveAlias(reference.getReferenceType()));
-                          explicitReferences.put(node.getNodeId(), reference);
-
+                          explicitReferences.computeIfAbsent(node.getNodeId(), k -> new ArrayList<>()).add(reference);
                           var inverse = new Reference();
                           inverse.setValue(node.getNodeId());
                           inverse.setIsForward(!reference.isIsForward());
                           inverse.setReferenceType(reference.getReferenceType());
-                          implicitReferences.put(reference.getValue(), inverse);
+                          implicitReferences.computeIfAbsent(reference.getValue(), k -> new ArrayList<>()).add(inverse);
                         });
               }
             });
@@ -180,12 +176,12 @@ public class NodeSet implements NodeSetContext {
 
   @Override
   public List<Reference> getExplicitReferences(String nodeId) {
-    return explicitReferences.get(nodeId);
+    return explicitReferences.getOrDefault(nodeId, Collections.emptyList());
   }
 
   @Override
   public List<Reference> getImplicitReferences(String nodeId) {
-    return implicitReferences.get(nodeId);
+    return implicitReferences.getOrDefault(nodeId, Collections.emptyList());
   }
 
   private String getNamespaceUri(String nodeId) {
@@ -208,39 +204,56 @@ public class NodeSet implements NodeSetContext {
     private final Map<String, List<Reference>> references = new HashMap<>();
 
     private List<Reference> get(String nodeId) {
-      return references.computeIfAbsent(
-          nodeId,
-          id -> {
-            var combined = new LinkedHashSet<Equivalence.Wrapper<Reference>>();
-            getExplicitReferences(id).stream()
-                .map(ReferenceEquivalence.INSTANCE::wrap)
-                .forEach(combined::add);
-            getImplicitReferences(id).stream()
-                .map(ReferenceEquivalence.INSTANCE::wrap)
-                .forEach(combined::add);
-            return combined.stream().map(Equivalence.Wrapper::get).collect(Collectors.toList());
-          });
+      return references.computeIfAbsent(nodeId, id -> {
+        var combined = new LinkedHashSet<ReferenceWrapper>();
+        getExplicitReferences(nodeId).stream().map(ReferenceWrapper::new).forEach(combined::add);
+        getImplicitReferences(nodeId).stream().map(ReferenceWrapper::new).forEach(combined::add);
+        return combined.stream().map(ReferenceWrapper::get).toList();
+      });
     }
 
-    private static class ReferenceEquivalence extends Equivalence<Reference> {
+    private static class ReferenceWrapper {
+      private final Reference reference;
 
-      private static final ReferenceEquivalence INSTANCE = new ReferenceEquivalence();
+      private ReferenceWrapper(Reference reference) {
+        this.reference = reference;
+      }
 
-      @Override
-      protected boolean doEquivalent(Reference a, Reference b) {
-        return Objects.equals(a.getValue(), b.getValue())
-            && Objects.equals(a.getReferenceType(), b.getReferenceType())
-            && Objects.equals(a.isIsForward(), b.isIsForward());
+      public Reference get() {
+        return reference;
+      }
+
+      private boolean equivalent(Reference a, Reference b) {
+        if (a == b) {
+          return true;
+        }
+        if (a == null || b == null) {
+          return false;
+        }
+        return Objects.equals(a.getValue(), b.getValue()) && Objects.equals(a.getReferenceType(), b.getReferenceType())
+            && a.isIsForward() == b.isIsForward();
       }
 
       @Override
-      protected int doHash(Reference reference) {
-        return Objects.hash(
-            reference.getReferenceType(), reference.getValue(), reference.isIsForward());
+      public boolean equals(Object obj) {
+        if (this == obj) {
+          return true;
+        }
+        if (obj instanceof ReferenceWrapper other) {
+          return equivalent(this.reference, other.reference);
+        }
+        return false;
+      }
+
+      @Override
+      public int hashCode() {
+        if (reference == null)
+          return 0;
+        return Objects.hash(reference.getReferenceType(), reference.getValue(), reference.isIsForward());
       }
     }
   }
-
+  
   public static NodeSet load(InputStream inputStream) throws JAXBException {
     return load(Collections.singletonList(inputStream));
   }
