@@ -47,7 +47,6 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <!-- Dependencies -->
-    <guava.version>33.4.6-jre</guava.version>
     <jakarta-xml-bind-api.version>4.0.2</jakarta-xml-bind-api.version>
     <jaxb.version>4.0.5</jaxb.version>
     <jaxb-xjc.version>4.0.5</jaxb-xjc.version>
