@@ -374,6 +374,15 @@ public class NodeSetNodeLoader {
   }
 
   private UaNode buildReferenceTypeNode(UAReferenceType referenceType) {
+    // Allow the UaReferenceTypeNode to have a null inverseName rather than a "null" inverseName,
+    // which results in Bad_AttributeIdUnknown when a Client reads the optional InverseName
+    // attribute, and it has not been specified. The CTT is expecting that the attribute does not
+    // exist when there is no inverse name, rather than receiving a "null" LocalizedText value.
+    org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText inverseName = null;
+    if (referenceType.getInverseName() != null && !referenceType.getInverseName().isEmpty()) {
+      inverseName = newLocalizedText(referenceType.getInverseName());
+    }
+
     return new UaReferenceTypeNode(
         context,
         reindexNodeId(referenceType.getNodeId()),
@@ -387,7 +396,7 @@ public class NodeSetNodeLoader {
         newAccessRestrictionType(referenceType.getAccessRestrictions()),
         referenceType.isIsAbstract(),
         referenceType.isSymmetric(),
-        newLocalizedText(referenceType.getInverseName()));
+        inverseName);
   }
 
   private UaNode buildVariableNode(UAVariable variable) {
