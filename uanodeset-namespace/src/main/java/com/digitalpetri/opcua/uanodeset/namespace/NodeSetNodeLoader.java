@@ -234,12 +234,14 @@ public class NodeSetNodeLoader {
 
             try {
               Variant value = decodeXmlValue(variable.getDataType(), any);
+              StatusCode statusCode =
+                  value.isNotNull() ? StatusCode.GOOD : new StatusCode(StatusCodes.Bad_NoValue);
 
               UaVariableNode variableNode =
                   (UaVariableNode)
                       context.getNodeManager().getNode(reindexNodeId(nodeId)).orElseThrow();
 
-              variableNode.setValue(new DataValue(value, StatusCode.GOOD, DateTime.now()));
+              variableNode.setValue(new DataValue(value, statusCode, DateTime.now()));
             } catch (Exception e) {
               logger.warn("Failed to decode XML value for Variable: {}", nodeId, e);
             }
@@ -250,6 +252,8 @@ public class NodeSetNodeLoader {
 
             try {
               Variant value = decodeXmlValue(variableType.getDataType(), any);
+              StatusCode statusCode =
+                  value.isNotNull() ? StatusCode.GOOD : new StatusCode(StatusCodes.Bad_NoValue);
 
               UaVariableTypeNode variableTypeNode =
                   (UaVariableTypeNode)
@@ -258,8 +262,7 @@ public class NodeSetNodeLoader {
                           .getNode(reindexNodeId(variableType.getNodeId()))
                           .orElseThrow();
 
-              variableTypeNode.setValue(
-                  new DataValue(value, StatusCode.GOOD, null, DateTime.now()));
+              variableTypeNode.setValue(new DataValue(value, statusCode, null, DateTime.now()));
             } catch (Exception e) {
               logger.warn(
                   "Failed to decode XML value for VariableType: {}", variableType.getNodeId(), e);
@@ -400,8 +403,6 @@ public class NodeSetNodeLoader {
   }
 
   private UaNode buildVariableNode(UAVariable variable) {
-    Variant value = Variant.NULL_VALUE;
-
     NodeId typeDefinitionId = NodeId.NULL_VALUE;
 
     List<Reference> references = nodeSet.getExplicitReferences(variable.getNodeId());
@@ -437,7 +438,8 @@ public class NodeSetNodeLoader {
               newRolePermissionTypeArray(variable.getRolePermissions()),
               null,
               newAccessRestrictionType(variable.getAccessRestrictions()),
-              new DataValue(value, StatusCode.GOOD, DateTime.now()),
+              new DataValue(
+                  Variant.NULL_VALUE, new StatusCode(StatusCodes.Bad_NoValue), DateTime.now()),
               reindexNodeId(variable.getDataType()),
               variable.getValueRank(),
               newArrayDimensions(variable.getArrayDimensions()));
@@ -461,7 +463,8 @@ public class NodeSetNodeLoader {
           newRolePermissionTypeArray(variable.getRolePermissions()),
           null,
           newAccessRestrictionType(variable.getAccessRestrictions()),
-          new DataValue(value, StatusCode.GOOD, DateTime.now()),
+          new DataValue(
+              Variant.NULL_VALUE, new StatusCode(StatusCodes.Bad_NoValue), DateTime.now()),
           reindexNodeId(variable.getDataType()),
           variable.getValueRank(),
           newArrayDimensions(variable.getArrayDimensions()),
@@ -474,8 +477,6 @@ public class NodeSetNodeLoader {
   }
 
   private UaNode buildVariableTypeNode(UAVariableType variableType) {
-    Variant value = Variant.NULL_VALUE;
-
     return new UaVariableTypeNode(
         context,
         reindexNodeId(variableType.getNodeId()),
@@ -487,7 +488,11 @@ public class NodeSetNodeLoader {
         newRolePermissionTypeArray(variableType.getRolePermissions()),
         null,
         newAccessRestrictionType(variableType.getAccessRestrictions()),
-        new DataValue(value, StatusCode.GOOD, DateTime.NULL_VALUE, DateTime.now()),
+        new DataValue(
+            Variant.NULL_VALUE,
+            new StatusCode(StatusCodes.Bad_NoValue),
+            DateTime.NULL_VALUE,
+            DateTime.now()),
         reindexNodeId(variableType.getDataType()),
         variableType.getValueRank(),
         newArrayDimensions(variableType.getArrayDimensions()),
