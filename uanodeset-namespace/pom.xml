@@ -10,6 +10,8 @@
     <version>0.4-SNAPSHOT</version>
   </parent>
 
+  <name>UANodeSet :: Namespace</name>
+
   <artifactId>uanodeset-namespace</artifactId>
 
   <dependencies>
