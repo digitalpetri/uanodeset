@@ -7,8 +7,10 @@
   <parent>
     <groupId>com.digitalpetri.opcua</groupId>
     <artifactId>uanodeset</artifactId>
-    <version>0.4-SNAPSHOT</version>
+    <version>0.5-SNAPSHOT</version>
   </parent>
+
+  <name>UANodeSet :: Namespace</name>
 
   <artifactId>uanodeset-namespace</artifactId>
 
@@ -16,7 +18,7 @@
     <dependency>
       <groupId>com.digitalpetri.opcua</groupId>
       <artifactId>uanodeset-core</artifactId>
-      <version>0.4-SNAPSHOT</version>
+      <version>0.5-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.milo</groupId>
@@ -29,5 +31,19 @@
       <version>${milo.version}</version>
     </dependency>
   </dependencies>
+
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 
 </project>
