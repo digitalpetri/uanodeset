@@ -50,7 +50,9 @@ import org.eclipse.milo.opcua.stack.core.types.UaStructuredType;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DateTime;
 import org.eclipse.milo.opcua.stack.core.types.builtin.ExpandedNodeId;
+import org.eclipse.milo.opcua.stack.core.types.builtin.ExpandedNodeId.NamespaceReference;
 import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
+import org.eclipse.milo.opcua.stack.core.types.builtin.Matrix;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName;
 import org.eclipse.milo.opcua.stack.core.types.builtin.StatusCode;
@@ -569,12 +571,21 @@ public class NodeSetNodeLoader {
 
           @Override
           protected ExpandedNodeId reindexExpandedNodeId(ExpandedNodeId expandedNodeId) {
-            String namespaceUri =
-                nodeSet
-                    .getNodeSet()
-                    .getNamespaceUris()
-                    .getUri()
-                    .get(expandedNodeId.getNamespaceIndex().intValue());
+            String namespaceUri;
+
+            if (expandedNodeId.namespace() instanceof NamespaceReference.NamespaceIndex index) {
+              namespaceUri =
+                  nodeSet
+                      .getNodeSet()
+                      .getNamespaceUris()
+                      .getUri()
+                      .get(index.namespaceIndex().intValue());
+            } else if (expandedNodeId.namespace() instanceof NamespaceReference.NamespaceUri uri) {
+              namespaceUri = uri.namespaceUri();
+            } else {
+              throw new IllegalStateException(
+                  "unexpected namespace type: " + expandedNodeId.namespace());
+            }
 
             return expandedNodeId.reindex(context.getServer().getNamespaceTable(), namespaceUri);
           }
@@ -595,49 +606,90 @@ public class NodeSetNodeLoader {
     decoder.setInput(new StringReader(xmlString));
     Object valueObject = decoder.decodeVariantValue();
 
+    valueObject = transcodeExtensionObjects(dataTypeId, valueObject, decoder);
+
+    return Variant.of(valueObject);
+  }
+
+  /**
+   * Transcode scalar, array, or matrix ExtensionObject values from XML encoding to Binary encoding.
+   *
+   * @param dataTypeId the data type ID string.
+   * @param valueObject the value object to transcode.
+   * @param decoder the XML decoder configured with reindexing.
+   * @return the transcoded value object.
+   */
+  private Object transcodeExtensionObjects(
+      String dataTypeId, Object valueObject, OpcUaXmlDecoder decoder) {
+
     if (valueObject instanceof ExtensionObject xo) {
-      // Transcode the ExtensionObject from its XML encoding to Binary encoding.
-      // We have to roll our own transcoding instead of using ExtensionObject::transcode
-      // so that we can use the OpcUaXmlDecoder declared above, which is set up for reindexing.
-
-      try {
-        DataType dataType =
-            context.getServer().getDataTypeTree().getDataType(reindexNodeId(dataTypeId));
-
-        if (dataType == null) {
-          throw new IllegalStateException("DataType not found for NodeId: " + dataTypeId);
+      return transcodeExtensionObject(dataTypeId, xo, decoder);
+    } else if (valueObject instanceof ExtensionObject[] xoArray) {
+      ExtensionObject[] xos = new ExtensionObject[xoArray.length];
+      for (int i = 0; i < xoArray.length; i++) {
+        xos[i] = transcodeExtensionObject(dataTypeId, xoArray[i], decoder);
+      }
+      return xos;
+    } else if (valueObject instanceof Matrix matrix) {
+      Object elements = matrix.getElements();
+      if (elements instanceof ExtensionObject[] xoArray) {
+        ExtensionObject[] transcoded = new ExtensionObject[xoArray.length];
+        for (int i = 0; i < xoArray.length; i++) {
+          transcoded[i] = transcodeExtensionObject(dataTypeId, xoArray[i], decoder);
         }
-
-        DataTypeCodec codec =
-            encodingContext.getDataTypeManager().getCodec(xo.getEncodingOrTypeId());
-
-        if (codec != null) {
-          XmlElement xmlBody = (XmlElement) xo.getBody();
-          String xml = xmlBody.getFragmentOrEmpty();
-
-          try {
-            decoder.setInput(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
-          } catch (IOException | SAXException e) {
-            throw new UaSerializationException(StatusCodes.Bad_DecodingError, e);
-          }
-
-          UaStructuredType decoded = decoder.decodeStruct(null, codec);
-
-          NodeId binaryEncodingId = dataType.getBinaryEncodingId();
-          assert binaryEncodingId != null;
-
-          valueObject = ExtensionObject.encode(encodingContext, decoded);
-        } else {
-          throw new UaSerializationException(
-              StatusCodes.Bad_DecodingError,
-              "no codec registered for encodingId=" + xo.getEncodingOrTypeId());
-        }
-      } catch (Exception e) {
-        logger.warn("Failed to transcode ExtensionObject: {}", xo, e);
+        return new Matrix(transcoded, matrix.getDimensions());
       }
     }
 
-    return Variant.of(valueObject);
+    return valueObject;
+  }
+
+  /**
+   * Transcode a single ExtensionObject from XML encoding to Binary encoding.
+   *
+   * @param dataTypeId the data type ID string.
+   * @param xo the ExtensionObject to transcode.
+   * @param decoder the XML decoder configured with reindexing.
+   * @return the transcoded ExtensionObject, or the original if transcoding fails.
+   */
+  private ExtensionObject transcodeExtensionObject(
+      String dataTypeId, ExtensionObject xo, OpcUaXmlDecoder decoder) {
+
+    try {
+      DataType dataType =
+          context.getServer().getDataTypeTree().getDataType(reindexNodeId(dataTypeId));
+
+      if (dataType == null) {
+        throw new IllegalStateException("DataType not found for NodeId: " + dataTypeId);
+      }
+
+      DataTypeCodec codec = encodingContext.getDataTypeManager().getCodec(xo.getEncodingOrTypeId());
+
+      if (codec != null) {
+        XmlElement xmlBody = (XmlElement) xo.getBody();
+        String xml = xmlBody.getFragmentOrEmpty();
+
+        try {
+          decoder.setInput(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+        } catch (IOException | SAXException e) {
+          throw new UaSerializationException(StatusCodes.Bad_DecodingError, e);
+        }
+
+        UaStructuredType decoded = decoder.decodeStruct(null, codec);
+
+        NodeId binaryEncodingId = dataType.getBinaryEncodingId();
+        assert binaryEncodingId != null;
+
+        return ExtensionObject.encode(encodingContext, decoded);
+      } else {
+        throw new UaSerializationException(
+            StatusCodes.Bad_DecodingError,
+            "no codec registered for encodingId=" + xo.getEncodingOrTypeId());
+      }
+    } catch (Exception e) {
+      logger.warn("Failed to transcode ExtensionObject: {}", xo, e);
+      return xo;
+    }
   }
 
   /**
