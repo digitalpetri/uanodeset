@@ -12,10 +12,13 @@ import org.jspecify.annotations.Nullable;
 import org.opcfoundation.ua.*;
 
 /**
- * Holds a UANodeSet and does some post-processing to make it a little more usable.
+ * Normalized, indexed view of one or more OPC UA NodeSets.
+ *
+ * <p>A {@link NodeSet} wraps a JAXB {@link UANodeSet} after applying the post-processing that most
+ * loaders, validators, and generators need before they can reason about the model:
  *
  * <ul>
- *   <li>The URI table contains the base OPC UA namespace URI and the UANodeSet contains the base
+ *   <li>The URI table contains the base OPC UA namespace URI, and the UANodeSet contains the base
  *       OPC UA model
  *   <li>Fields containing NodeIds are replaced with NodeIds that have had any potential alias
  *       resolved
@@ -24,6 +27,10 @@ import org.opcfoundation.ua.*;
  *   <li>Implicit References are created for all References that are not explicitly defined in the
  *       UANodeSet
  * </ul>
+ *
+ * <p>Use {@link #load(InputStream)}, {@link #load(List)}, {@link #from(UANodeSet)}, or {@link
+ * #from(Collection)} when starting from an extension model. Those factories merge the supplied
+ * model with the bundled OPC UA base NodeSet before constructing the indexed context.
  */
 public class NodeSet implements NodeSetContext {
 
@@ -37,14 +44,13 @@ public class NodeSet implements NodeSetContext {
   private final UANodeSet nodeSet;
 
   /**
-   * Create a new NodeSet from a UANodeSet.
+   * Create an indexed context around an already-merged NodeSet.
    *
-   * <p>This UANodeSet must contain the base OPC UA model.
+   * <p>The supplied {@link UANodeSet} must already contain the base OPC UA model. Factories such as
+   * {@link #from(UANodeSet)} are the preferred entry point when callers have only an extension
+   * model.
    *
-   * <p>Typically, this will be a merged UANodeSet containing the base model and some other model(s)
-   * that are being loaded into an address space or fed to a code generator.
-   *
-   * @param nodeSet the UANodeSet to create a NodeSet from.
+   * @param nodeSet the merged NodeSet to index and normalize.
    */
   public NodeSet(UANodeSet nodeSet) {
     this.nodeSet = nodeSet;
@@ -162,26 +168,58 @@ public class NodeSet implements NodeSetContext {
             });
   }
 
+  /**
+   * Get the normalized JAXB NodeSet backing this context.
+   *
+   * @return the merged and normalized NodeSet.
+   */
   @Override
   public UANodeSet getNodeSet() {
     return nodeSet;
   }
 
+  /**
+   * Look up a node by its normalized NodeId string.
+   *
+   * @param nodeId the NodeId of the node to get.
+   * @return the matching node, or {@code null} when the NodeId is not present.
+   */
   @Override
   public @Nullable UANode getNode(String nodeId) {
     return nodeMap.get(nodeId);
   }
 
+  /**
+   * Get all references known for a node.
+   *
+   * <p>The returned references include explicit references from the XML and implicit inverse
+   * references synthesized while the NodeSet was indexed.
+   *
+   * @param nodeId the NodeId of the node to inspect.
+   * @return the deduplicated references for the node.
+   */
   @Override
   public List<Reference> getReferences(String nodeId) {
     return combinedReferences.get(nodeId);
   }
 
+  /**
+   * Get the references explicitly declared on a node in the source XML.
+   *
+   * @param nodeId the NodeId of the node to inspect.
+   * @return the explicit references for the node.
+   */
   @Override
   public List<Reference> getExplicitReferences(String nodeId) {
     return explicitReferences.getOrDefault(nodeId, Collections.emptyList());
   }
 
+  /**
+   * Get the implicit references synthesized from other nodes' explicit references.
+   *
+   * @param nodeId the NodeId of the node to inspect.
+   * @return the implicit references for the node.
+   */
   @Override
   public List<Reference> getImplicitReferences(String nodeId) {
     return implicitReferences.getOrDefault(nodeId, Collections.emptyList());
@@ -264,16 +302,65 @@ public class NodeSet implements NodeSetContext {
     }
   }
 
+  /**
+   * Parse and load a single NodeSet stream.
+   *
+   * <p>The parsed model is merged with the bundled OPC UA base NodeSet before indexing.
+   *
+   * @param inputStream the XML stream to parse.
+   * @return the normalized NodeSet context.
+   * @throws JAXBException if the stream cannot be parsed or the NodeSets cannot be merged.
+   */
   public static NodeSet load(InputStream inputStream) throws JAXBException {
     return load(Collections.singletonList(inputStream));
   }
 
+  /**
+   * Parse and load multiple NodeSet streams in order.
+   *
+   * <p>The parsed models are merged with the bundled OPC UA base NodeSet before indexing. Later
+   * NodeSets may contribute additional namespaces, models, and nodes to the merged result.
+   *
+   * @param inputStreams the XML streams to parse.
+   * @return the normalized NodeSet context.
+   * @throws JAXBException if any stream cannot be parsed or the NodeSets cannot be merged.
+   */
   public static NodeSet load(List<InputStream> inputStreams) throws JAXBException {
     var nodeSets = new ArrayList<UANodeSet>();
     for (InputStream inputStream : inputStreams) {
       nodeSets.add(UANodeSetParser.parse(inputStream));
     }
 
+    return from(nodeSets);
+  }
+
+  /**
+   * Create a normalized context from an already-parsed extension NodeSet.
+   *
+   * <p>The supplied model is merged with the bundled OPC UA base NodeSet before indexing, so
+   * callers do not need to include the standard base model themselves.
+   *
+   * @param nodeSet the parsed extension NodeSet.
+   * @return the normalized NodeSet context.
+   * @throws JAXBException if the bundled base NodeSet cannot be parsed or the NodeSets cannot be
+   *     merged.
+   */
+  public static NodeSet from(UANodeSet nodeSet) throws JAXBException {
+    return from(Collections.singletonList(nodeSet));
+  }
+
+  /**
+   * Create a normalized context from already-parsed extension NodeSets.
+   *
+   * <p>The supplied models are merged with the bundled OPC UA base NodeSet before indexing. This is
+   * the shared merge path used by all public loading factories.
+   *
+   * @param nodeSets the parsed extension NodeSets to merge in order.
+   * @return the normalized NodeSet context.
+   * @throws JAXBException if the bundled base NodeSet cannot be parsed or the NodeSets cannot be
+   *     merged.
+   */
+  public static NodeSet from(Collection<UANodeSet> nodeSets) throws JAXBException {
     // merge the base OPC UA NodeSet with the provided NodeSets
     UANodeSet mergedNodeSet =
         UANodeSetParser.parse(

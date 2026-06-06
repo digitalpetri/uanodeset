@@ -9,19 +9,43 @@ import org.opcfoundation.ua.DataTypeDefinition;
 import org.opcfoundation.ua.DataTypeField;
 import org.opcfoundation.ua.UADataType;
 
+/**
+ * Type hierarchy node for a {@link UADataType}.
+ *
+ * <p>In addition to the generic parent/children behavior from {@link TypeInfo}, datatype nodes
+ * expose the fields declared directly on the datatype and the fields inherited from ancestor
+ * datatypes. Code generators and namespace loaders use this wrapper when they need to interpret a
+ * structure, union, enumeration, option set, or simple subtype from the same public tree API.
+ */
 public class DataTypeInfo extends TypeInfo<UADataType> {
 
   private List<DataTypeField> fields;
   private List<DataTypeField> inheritedFields;
 
+  /**
+   * Create a datatype hierarchy node.
+   *
+   * @param parent the parent datatype, or {@code null} for {@code BaseDataType}.
+   * @param typeNode the JAXB datatype node.
+   */
   public DataTypeInfo(@Nullable DataTypeInfo parent, UADataType typeNode) {
     super(parent, typeNode);
   }
 
   /**
-   * Get the List of {@link DataTypeField} from this datatype's definition.
+   * Get the direct supertype as a datatype-specific node.
    *
-   * @return the List of {@link DataTypeField} from this datatype's definition.
+   * @return the parent datatype, or {@code null} for {@code BaseDataType}.
+   */
+  @Override
+  public @Nullable DataTypeInfo getParent() {
+    return (DataTypeInfo) super.getParent();
+  }
+
+  /**
+   * Get the fields declared directly by this datatype definition.
+   *
+   * @return the declared fields, or an empty list when the datatype has no definition.
    */
   public List<DataTypeField> getFields() {
     if (fields == null) {
@@ -37,16 +61,18 @@ public class DataTypeInfo extends TypeInfo<UADataType> {
   }
 
   /**
-   * Get the List of {@link DataTypeField} inherited from the definition of all parent datatypes.
+   * Get the fields inherited from ancestor datatype definitions.
    *
-   * @return the List of {@link DataTypeField} inherited from the definition of all parent
-   *     datatypes.
+   * <p>Fields are returned from the oldest ancestor toward the direct parent. If an ancestor field
+   * is redeclared by a later ancestor, the later declaration wins while preserving hierarchy order.
+   *
+   * @return the inherited fields visible before this datatype's own declared fields.
    */
   public List<DataTypeField> getInheritedFields() {
     if (inheritedFields == null) {
       var parentTypeInfos = new ArrayList<TypeInfo<UADataType>>();
 
-      TypeInfo<UADataType> parentTypeInfo = getParent();
+      DataTypeInfo parentTypeInfo = getParent();
       while (parentTypeInfo != null) {
         parentTypeInfos.add(parentTypeInfo);
 

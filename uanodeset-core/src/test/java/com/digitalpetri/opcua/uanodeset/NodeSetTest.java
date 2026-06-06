@@ -1,10 +1,18 @@
 package com.digitalpetri.opcua.uanodeset;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import com.digitalpetri.opcua.uanodeset.parser.UANodeSetParser;
 import jakarta.xml.bind.JAXBException;
 import java.io.IOException;
 import java.io.InputStream;
+import org.eclipse.milo.opcua.stack.core.NodeIds;
+import org.eclipse.milo.opcua.stack.core.util.Namespaces;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.opcfoundation.ua.UANodeSet;
 
 class NodeSetTest {
 
@@ -36,5 +44,28 @@ class NodeSetTest {
               + nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod().size()
               + " nodes.");
     }
+  }
+
+  @Test
+  void fromMergesBundledBaseNodeSet() throws JAXBException, IOException {
+    try (InputStream inputStream =
+        getClass().getClassLoader().getResourceAsStream("Opc.Ua.Di.NodeSet2.xml")) {
+
+      UANodeSet diNodeSet = UANodeSetParser.parse(inputStream);
+      NodeSet nodeSet = NodeSet.from(diNodeSet);
+
+      assertNotNull(nodeSet.getNode(NodeIds.BaseDataType.toParseableString()));
+      assertNotNull(nodeSet.getNode("ns=1;i=1001"));
+    }
+  }
+
+  @Test
+  void bundledBaseNodeSetResourceIsCurrent10507() throws JAXBException {
+    UANodeSet nodeSet =
+        UANodeSetParser.parse(
+            NodeSet.class.getClassLoader().getResourceAsStream("1.05/Opc.Ua.NodeSet2.xml"));
+
+    assertEquals(Namespaces.OPC_UA, nodeSet.getModels().getModel().get(0).getModelUri());
+    assertEquals("1.05.07", nodeSet.getModels().getModel().get(0).getVersion());
   }
 }

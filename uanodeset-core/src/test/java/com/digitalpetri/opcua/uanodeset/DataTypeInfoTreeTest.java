@@ -6,6 +6,7 @@ import jakarta.xml.bind.JAXBException;
 import java.io.IOException;
 import java.io.InputStream;
 import org.eclipse.milo.opcua.stack.core.NodeIds;
+import org.eclipse.milo.opcua.stack.core.OpcUaDataType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,22 @@ class DataTypeInfoTreeTest {
       assertTrue(dataTypeTree.isEnumeration(NodeIds.ApplicationType));
       assertFalse(dataTypeTree.isEnumeration(NodeIds.String));
       assertFalse(dataTypeTree.isEnumeration(NodeIds.Argument));
+    }
+
+    @Test
+    void genericDataTypeHelpers() {
+      var dataTypeTree = DataTypeInfoTree.create(nodeSet);
+
+      assertTrue(dataTypeTree.isAbstract(NodeIds.BaseDataType));
+      assertFalse(dataTypeTree.isAbstract(NodeIds.String));
+      assertTrue(dataTypeTree.isSimpleType(NodeIds.String));
+      assertFalse(dataTypeTree.isSimpleType(NodeIds.Argument));
+      assertFalse(dataTypeTree.isSimpleType("ns=1234;i=5678"));
+      assertEquals(String.class, dataTypeTree.getBackingClass(NodeIds.String));
+      assertEquals(Integer.class, dataTypeTree.getBackingClass(NodeIds.Enumeration));
+      assertEquals(OpcUaDataType.String, dataTypeTree.getOpcUaDataType(NodeIds.String));
+      assertEquals(OpcUaDataType.Int32, dataTypeTree.getOpcUaDataType(NodeIds.Enumeration));
+      assertEquals(OpcUaDataType.Int32, dataTypeTree.getOpcUaDataType(NodeIds.ApplicationType));
     }
   }
 }
