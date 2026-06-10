@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:uax="http://opcfoundation.org/UA/2008/02/Types.xsd">
+  <NamespaceUris>
+    <Uri>urn:uanodeset:test:basedatatype-reindex</Uri>
+  </NamespaceUris>
+  <Models>
+    <Model ModelUri="urn:uanodeset:test:basedatatype-reindex" Version="1.0.0"
+      PublicationDate="2026-01-01T00:00:00Z">
+      <RequiredModel ModelUri="http://opcfoundation.org/UA/" Version="1.05.04"
+        PublicationDate="2024-12-01T00:00:00Z"/>
+    </Model>
+  </Models>
+  <Aliases>
+    <Alias Alias="HasSubtype">i=45</Alias>
+    <Alias Alias="Boolean">i=1</Alias>
+    <Alias Alias="Int16">i=4</Alias>
+  </Aliases>
+  <UADataType NodeId="ns=1;i=3003" BrowseName="1:AbstractTestType" IsAbstract="true">
+    <DisplayName>AbstractTestType</DisplayName>
+    <References>
+      <Reference IsForward="false" ReferenceType="HasSubtype">i=22</Reference>
+    </References>
+    <Definition Name="1:AbstractTestType">
+      <Field Name="Int16Field" DataType="Int16"/>
+    </Definition>
+  </UADataType>
+  <UADataType NodeId="ns=1;i=3006" BrowseName="1:ConcreteTestType">
+    <DisplayName>ConcreteTestType</DisplayName>
+    <References>
+      <Reference IsForward="false" ReferenceType="HasSubtype">ns=1;i=3003</Reference>
+    </References>
+    <Definition Name="1:ConcreteTestType">
+      <Field Name="BooleanField" DataType="Boolean"/>
+    </Definition>
+  </UADataType>
+</UANodeSet>

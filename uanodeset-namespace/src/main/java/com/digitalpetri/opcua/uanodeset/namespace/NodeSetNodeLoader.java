@@ -774,7 +774,8 @@ public class NodeSetNodeLoader {
     return new AccessRestrictionType(ushort(value));
   }
 
-  private org.eclipse.milo.opcua.stack.core.types.structured.@Nullable DataTypeDefinition
+  // package-private visible for testing
+  org.eclipse.milo.opcua.stack.core.types.structured.@Nullable DataTypeDefinition
       newDataTypeDefinition(UADataType dataType, DataTypeInfoTree dataTypeTree) {
 
     DataTypeDefinition definition = dataType.getDefinition();
@@ -796,7 +797,7 @@ public class NodeSetNodeLoader {
     } else if (dataTypeTree.isStructure(dataType.getNodeId())) {
       NodeId baseDataType = NodeId.NULL_VALUE;
       if (typeInfo != null && typeInfo.getParent() != null) {
-        baseDataType = NodeId.parse(typeInfo.getParent().getTypeNode().getNodeId());
+        baseDataType = reindexNodeId(typeInfo.getParent().getTypeNode().getNodeId());
       }
 
       if (dataTypeTree.isOptionSet(dataType.getNodeId())) {
