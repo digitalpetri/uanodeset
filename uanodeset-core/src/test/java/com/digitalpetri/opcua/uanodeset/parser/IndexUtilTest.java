@@ -64,10 +64,12 @@ class IndexUtilTest {
     var qualifiedName = "1:Foo";
 
     var merged = new UriTable();
+    merged.getUri().add(Namespaces.OPC_UA);
     merged.getUri().add("uri1");
     merged.getUri().add("uri2");
 
     var original = new UriTable();
+    original.getUri().add(Namespaces.OPC_UA);
     original.getUri().add("uri2");
 
     String reindexed = IndexUtil.reindexQualifiedName(qualifiedName, merged, original);
@@ -76,13 +78,53 @@ class IndexUtilTest {
   }
 
   @Test
+  public void testReindexQualifiedNameNoOp() {
+    var qualifiedName = "1:Foo";
+
+    var merged = new UriTable();
+    merged.getUri().add(Namespaces.OPC_UA);
+    merged.getUri().add("uri1");
+
+    var original = new UriTable();
+    original.getUri().add(Namespaces.OPC_UA);
+    original.getUri().add("uri1");
+
+    String reindexed = IndexUtil.reindexQualifiedName(qualifiedName, merged, original);
+
+    assertEquals("1:Foo", reindexed);
+  }
+
+  @Test
+  public void testReindexQualifiedNameWithReordering() {
+    // A namespace that moves position during a merge (as O-PAS does, from index 1 to a higher
+    // index) must have its BrowseName namespace index remapped the same way as a NodeId.
+    var qualifiedName = "1:Foo";
+
+    var merged = new UriTable();
+    merged.getUri().add(Namespaces.OPC_UA);
+    merged.getUri().add("uriA");
+    merged.getUri().add("uriB");
+    merged.getUri().add("uriTarget");
+
+    var original = new UriTable();
+    original.getUri().add(Namespaces.OPC_UA);
+    original.getUri().add("uriTarget");
+
+    String reindexed = IndexUtil.reindexQualifiedName(qualifiedName, merged, original);
+
+    assertEquals("3:Foo", reindexed);
+  }
+
+  @Test
   public void testReindexQualifiedNameThrowsOnMissingUri() {
     var qualifiedName = "1:Foo";
 
     var merged = new UriTable();
+    merged.getUri().add(Namespaces.OPC_UA);
     merged.getUri().add("uri1");
 
     var original = new UriTable();
+    original.getUri().add(Namespaces.OPC_UA);
     original.getUri().add("uri2");
 
     assertThrows(
