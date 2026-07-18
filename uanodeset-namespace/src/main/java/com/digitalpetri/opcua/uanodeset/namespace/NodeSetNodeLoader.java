@@ -18,7 +18,9 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.stream.Stream;
@@ -126,6 +128,8 @@ public class NodeSetNodeLoader {
   }
 
   public void loadNodes() {
+    Set<ReferenceKey> loadedReferences = new HashSet<>();
+
     // Add references for all nodes.
     for (UANode node : nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod()) {
       String nodeId = resolveAlias(node.getNodeId());
@@ -136,7 +140,9 @@ public class NodeSetNodeLoader {
         for (Reference reference : node.getReferences().getReference()) {
           org.eclipse.milo.opcua.sdk.core.Reference ref = reindexReference(node, reference);
 
-          context.getNodeManager().addReferences(ref, context.getServer().getNamespaceTable());
+          if (loadedReferences.add(toReferenceKey(ref))) {
+            context.getNodeManager().addReferences(ref, context.getServer().getNamespaceTable());
+          }
         }
       }
     }
@@ -752,6 +758,26 @@ public class NodeSetNodeLoader {
         targetNodeId.expanded(context.getServer().getNamespaceTable()),
         reference.isIsForward());
   }
+
+  private ReferenceKey toReferenceKey(org.eclipse.milo.opcua.sdk.core.Reference reference) {
+    NodeId targetNodeId =
+        reference
+            .getTargetNodeId()
+            .toNodeId(context.getServer().getNamespaceTable())
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        "NodeSet reference target is not local: " + reference.getTargetNodeId()));
+
+    return reference.isForward()
+        ? new ReferenceKey(
+            reference.getSourceNodeId(), reference.getReferenceTypeId(), targetNodeId)
+        : new ReferenceKey(
+            targetNodeId, reference.getReferenceTypeId(), reference.getSourceNodeId());
+  }
+
+  private record ReferenceKey(
+      NodeId forwardSourceNodeId, NodeId referenceTypeId, NodeId forwardTargetNodeId) {}
 
   private String resolveAlias(String nodeIdString) {
     // TODO put these into a map to improve lookup performance
