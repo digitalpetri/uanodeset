@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <NamespaceUris>
+    <Uri>urn:uanodeset:test:reference-normalization</Uri>
+  </NamespaceUris>
+  <Models>
+    <Model ModelUri="urn:uanodeset:test:reference-normalization" Version="1.0.0"
+      PublicationDate="2026-07-18T00:00:00Z">
+      <RequiredModel ModelUri="http://opcfoundation.org/UA/" Version="1.05.04"
+        PublicationDate="2024-12-01T00:00:00Z"/>
+    </Model>
+  </Models>
+  <Aliases>
+    <Alias Alias="HasComponent">i=47</Alias>
+    <Alias Alias="HasProperty">i=46</Alias>
+  </Aliases>
+  <UAObject NodeId="ns=1;i=5000" BrowseName="1:Parent">
+    <DisplayName>Parent</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent">ns=1;i=5040</Reference>
+      <Reference ReferenceType="HasProperty">ns=1;i=5041</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=5040" BrowseName="1:ReciprocalChild">
+    <DisplayName>ReciprocalChild</DisplayName>
+    <References>
+      <Reference IsForward="false" ReferenceType="HasComponent">ns=1;i=5000</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=5041" BrowseName="1:OneSidedChild">
+    <DisplayName>OneSidedChild</DisplayName>
+    <References/>
+  </UAObject>
+</UANodeSet>
