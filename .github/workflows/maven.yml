@@ -18,4 +18,4 @@ jobs:
           cache: maven
 
       - name: Build with Maven
-        run: mvn -B package
+        run: mvn -B -q clean verify
