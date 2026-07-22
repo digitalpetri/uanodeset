@@ -19,7 +19,9 @@ import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
@@ -96,39 +98,91 @@ import org.slf4j.LoggerFactory;
 import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
 
+/**
+ * Materializes selected nodes from a normalized {@link NodeSet} in a Milo server address space.
+ *
+ * <p>The loader resolves type definitions and ancestry in model namespace space, reindexes NodeIds
+ * against the server namespace table, and invokes {@link NodeBehaviorRegistry} callbacks only after
+ * all selected nodes are installed and Variable value decoding has been attempted. Direct callers
+ * must add the merged model's namespace URIs to the server namespace table before loading; {@link
+ * NodeSetAddressSpace} performs that setup automatically.
+ */
 public class NodeSetNodeLoader {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  private final JAXBContext jaxbContext;
   private final Marshaller marshaller;
 
   private final NodeSet nodeSet;
   private final UaNodeContext context;
   private final EncodingContext encodingContext;
   private final Predicate<String> namespaceFilter;
+  private final NodeBehaviorRegistry behaviorRegistry;
 
+  /**
+   * Create a loader without post-load behavior callbacks.
+   *
+   * @param nodeSet the merged and normalized NodeSet to load.
+   * @param context the Milo node context that receives loaded nodes.
+   * @param encodingContext the encoding context used to decode values.
+   * @param namespaceFilter the predicate selecting namespace URIs to load.
+   */
   public NodeSetNodeLoader(
       NodeSet nodeSet,
       UaNodeContext context,
       EncodingContext encodingContext,
       Predicate<String> namespaceFilter) {
 
+    this(nodeSet, context, encodingContext, namespaceFilter, new NodeBehaviorRegistry());
+  }
+
+  /**
+   * Create a loader with post-load behavior callbacks.
+   *
+   * <p>The registry remains mutable until {@link #loadNodes()} begins, at which point its
+   * registrations are frozen for the duration of dispatch.
+   *
+   * @param nodeSet the merged and normalized NodeSet to load.
+   * @param context the Milo node context that receives loaded nodes.
+   * @param encodingContext the encoding context used to decode values.
+   * @param namespaceFilter the predicate selecting namespace URIs to load.
+   * @param behaviorRegistry the callbacks to invoke after all selected nodes complete the load
+   *     phases.
+   */
+  public NodeSetNodeLoader(
+      NodeSet nodeSet,
+      UaNodeContext context,
+      EncodingContext encodingContext,
+      Predicate<String> namespaceFilter,
+      NodeBehaviorRegistry behaviorRegistry) {
+
     this.nodeSet = nodeSet;
     this.context = context;
     this.encodingContext = encodingContext;
     this.namespaceFilter = namespaceFilter;
+    this.behaviorRegistry = behaviorRegistry;
 
     try {
-      jaxbContext = JAXBContext.newInstance(ObjectFactory.class);
+      JAXBContext jaxbContext = JAXBContext.newInstance(ObjectFactory.class);
       marshaller = jaxbContext.createMarshaller();
     } catch (JAXBException e) {
       throw new RuntimeException(e);
     }
   }
 
+  /**
+   * Load all selected nodes and invoke post-load callbacks synchronously.
+   *
+   * <p>Each callback receives a {@link LoadedNode} and the {@link NodeMatch} that selected it. A
+   * callback failure aborts the load and is propagated to the caller. When type callbacks are
+   * registered, malformed known ObjectType or VariableType hierarchies also abort matching.
+   * Individual Variable value decoding failures are logged and do not prevent later nodes from
+   * loading.
+   */
   public void loadNodes() {
+    NodeBehaviorRegistry.Dispatcher behaviorDispatcher = behaviorRegistry.freeze();
     Set<ReferenceKey> loadedReferences = new HashSet<>();
+    Map<UANode, UaNode> loadedNodes = new IdentityHashMap<>();
 
     // Add references for all nodes.
     for (UANode node : nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod()) {
@@ -154,22 +208,21 @@ public class NodeSetNodeLoader {
           nodeSet.getNodeSet().getNamespaceUris().getUri().get(getNamespaceIndex(nodeId));
 
       if (namespaceFilter.test(namespaceUri)) {
+        UaNode loadedNode = null;
+
         if (node instanceof UAObjectType objectType) {
-          UaNode objectTypeNode = buildObjectTypeNode(objectType);
-
-          context.getNodeManager().addNode(objectTypeNode);
+          loadedNode = buildObjectTypeNode(objectType);
         } else if (node instanceof UAVariableType variableType) {
-          UaNode variableTypeNode = buildVariableTypeNode(variableType);
-
-          context.getNodeManager().addNode(variableTypeNode);
+          loadedNode = buildVariableTypeNode(variableType);
         } else if (node instanceof UADataType dataType) {
-          UaDataTypeNode dataTypeNode = buildDataTypeNode(dataType);
-
-          context.getNodeManager().addNode(dataTypeNode);
+          loadedNode = buildDataTypeNode(dataType);
         } else if (node instanceof UAReferenceType referenceType) {
-          UaNode referenceTypeNode = buildReferenceTypeNode(referenceType);
+          loadedNode = buildReferenceTypeNode(referenceType);
+        }
 
-          context.getNodeManager().addNode(referenceTypeNode);
+        if (loadedNode != null) {
+          context.getNodeManager().addNode(loadedNode);
+          loadedNodes.put(node, loadedNode);
         }
       }
     }
@@ -181,22 +234,21 @@ public class NodeSetNodeLoader {
           nodeSet.getNodeSet().getNamespaceUris().getUri().get(getNamespaceIndex(nodeId));
 
       if (namespaceFilter.test(namespaceUri)) {
+        UaNode loadedNode = null;
+
         if (node instanceof UAObject object) {
-          UaNode objectNode = buildObjectNode(object);
-
-          context.getNodeManager().addNode(objectNode);
+          loadedNode = buildObjectNode(object);
         } else if (node instanceof UAMethod method) {
-          UaNode methodNode = buildMethodNode(method);
-
-          context.getNodeManager().addNode(methodNode);
+          loadedNode = buildMethodNode(method);
         } else if (node instanceof UAVariable variable) {
-          UaNode variableNode = buildVariableNode(variable);
-
-          context.getNodeManager().addNode(variableNode);
+          loadedNode = buildVariableNode(variable);
         } else if (node instanceof UAView view) {
-          UaNode viewNode = buildViewNode(view);
+          loadedNode = buildViewNode(view);
+        }
 
-          context.getNodeManager().addNode(viewNode);
+        if (loadedNode != null) {
+          context.getNodeManager().addNode(loadedNode);
+          loadedNodes.put(node, loadedNode);
         }
       }
     }
@@ -279,6 +331,34 @@ public class NodeSetNodeLoader {
         }
       }
     }
+
+    fireNodeLoadedCallbacks(loadedNodes, behaviorDispatcher);
+  }
+
+  private void fireNodeLoadedCallbacks(
+      Map<UANode, UaNode> loadedNodes, NodeBehaviorRegistry.Dispatcher behaviorDispatcher) {
+
+    if (!behaviorDispatcher.hasCallbacks()) {
+      return;
+    }
+
+    for (UANode sourceNode : nodeSet.getNodeSet().getUAObjectOrUAVariableOrUAMethod()) {
+      UaNode node = loadedNodes.get(sourceNode);
+      if (node == null) {
+        continue;
+      }
+
+      NodeId typeDefinitionId =
+          nodeSet.getTypeDefinition(sourceNode).map(this::reindexNodeId).orElse(NodeId.NULL_VALUE);
+      List<NodeId> reindexedTypeHierarchy =
+          behaviorDispatcher.hasTypeRegistrations()
+              ? nodeSet.getTypeHierarchy(sourceNode).stream().map(this::reindexNodeId).toList()
+              : List.of();
+
+      behaviorDispatcher.fireCallbacks(
+          new LoadedNode(node, typeDefinitionId, sourceNode, nodeSet, context),
+          reindexedTypeHierarchy);
+    }
   }
 
   private UaDataTypeNode buildDataTypeNode(UADataType dataType) {
@@ -314,20 +394,8 @@ public class NodeSetNodeLoader {
   }
 
   private UaNode buildObjectNode(UAObject object) {
-    NodeId typeDefinitionId = NodeId.NULL_VALUE;
-
-    List<Reference> references = nodeSet.getExplicitReferences(object.getNodeId());
-
-    for (Reference reference : references) {
-      String referenceType = resolveAlias(reference.getReferenceType());
-
-      if (referenceType.equals("i=40")) {
-        String typeDefinition = reference.getValue();
-
-        typeDefinitionId = reindexNodeId(resolveAlias(typeDefinition));
-        break;
-      }
-    }
+    NodeId typeDefinitionId =
+        nodeSet.getTypeDefinition(object).map(this::reindexNodeId).orElse(NodeId.NULL_VALUE);
 
     ObjectTypeManager.ObjectNodeConstructor constructor =
         context
@@ -411,20 +479,8 @@ public class NodeSetNodeLoader {
   }
 
   private UaNode buildVariableNode(UAVariable variable) {
-    NodeId typeDefinitionId = NodeId.NULL_VALUE;
-
-    List<Reference> references = nodeSet.getExplicitReferences(variable.getNodeId());
-
-    for (Reference reference : references) {
-      String referenceType = resolveAlias(reference.getReferenceType());
-
-      if (referenceType.equals("i=40")) {
-        String typeDefinition = reference.getValue();
-
-        typeDefinitionId = reindexNodeId(resolveAlias(typeDefinition));
-        break;
-      }
-    }
+    NodeId typeDefinitionId =
+        nodeSet.getTypeDefinition(variable).map(this::reindexNodeId).orElse(NodeId.NULL_VALUE);
 
     VariableTypeManager.VariableNodeConstructor constructor =
         context
@@ -703,20 +759,28 @@ public class NodeSetNodeLoader {
    * Server for its original namespace URI.
    *
    * @param nodeIdString a NodeId String from a {@link UANodeSet}.
-   * @return a {@link NodeId} that has been re-indexed for the current server.
+   * @return a {@link NodeId} that has been reindexed for the current server.
    */
   protected NodeId reindexNodeId(String nodeIdString) {
-    nodeIdString = resolveAlias(nodeIdString);
+    return reindexNodeId(NodeId.parse(resolveAlias(nodeIdString)));
+  }
 
-    int namespaceIndex = getNamespaceIndex(nodeIdString);
+  /**
+   * Re-index a semantic NodeId from model namespace space into the current server's namespace
+   * space.
+   *
+   * @param nodeId a NodeId using indexes from the merged NodeSet model.
+   * @return the corresponding NodeId using the server's namespace indexes.
+   */
+  protected NodeId reindexNodeId(NodeId nodeId) {
+    int namespaceIndex = nodeId.getNamespaceIndex().intValue();
 
     if (namespaceIndex == 0) {
-      return NodeId.parse(nodeIdString);
+      return nodeId;
     } else {
-      return NodeId.parse(nodeIdString)
-          .reindex(
-              context.getServer().getNamespaceTable(),
-              nodeSet.getNodeSet().getNamespaceUris().getUri().get(namespaceIndex));
+      return nodeId.reindex(
+          context.getServer().getNamespaceTable(),
+          nodeSet.getNodeSet().getNamespaceUris().getUri().get(namespaceIndex));
     }
   }
 
@@ -725,7 +789,7 @@ public class NodeSetNodeLoader {
    * the Server for its original namespace URI.
    *
    * @param qualifiedName a QualifiedName String from a {@link UANodeSet}.
-   * @return a {@link QualifiedName} that has been re-indexed for the current server.
+   * @return a {@link QualifiedName} that has been reindexed for the current server.
    */
   protected QualifiedName reindexQualifiedName(String qualifiedName) {
     Matcher matcher = IndexUtil.PATTERN_QUALIFIED_NAME.matcher(qualifiedName);
@@ -879,7 +943,7 @@ public class NodeSetNodeLoader {
         field.isIsOptional() || field.isAllowSubTypes());
   }
 
-  private UInteger[] newArrayDimensions(String arrayDimensions) {
+  private UInteger @Nullable [] newArrayDimensions(@Nullable String arrayDimensions) {
     if (arrayDimensions == null || arrayDimensions.isEmpty()) {
       return null;
     }
@@ -896,7 +960,7 @@ public class NodeSetNodeLoader {
   }
 
   private org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText newLocalizedText(
-      List<LocalizedText> displayName) {
+      @Nullable List<LocalizedText> displayName) {
 
     String locale = null;
     String text = null;

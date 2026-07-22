@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd"
+  xmlns:uax="http://opcfoundation.org/UA/2008/02/Types.xsd">
+  <NamespaceUris>
+    <Uri>urn:uanodeset:test:node-behaviors</Uri>
+  </NamespaceUris>
+  <Models>
+    <Model ModelUri="urn:uanodeset:test:node-behaviors" Version="1.0.0"
+      PublicationDate="2026-07-22T00:00:00Z">
+      <RequiredModel ModelUri="http://opcfoundation.org/UA/" Version="1.05.04"
+        PublicationDate="2024-12-01T00:00:00Z"/>
+    </Model>
+  </Models>
+  <Aliases>
+    <Alias Alias="Boolean">i=1</Alias>
+    <Alias Alias="HasSubtype">i=45</Alias>
+    <Alias Alias="HasTypeDefinition">i=40</Alias>
+  </Aliases>
+  <UAObjectType NodeId="ns=1;i=1000" BrowseName="1:BehaviorBaseType">
+    <DisplayName>BehaviorBaseType</DisplayName>
+    <References>
+      <Reference IsForward="false" ReferenceType="HasSubtype">i=58</Reference>
+      <Reference IsForward="false" ReferenceType="ns=0;i=40">ns=1;i=2002</Reference>
+    </References>
+  </UAObjectType>
+  <UAObjectType NodeId="ns=1;i=1001" BrowseName="1:BehaviorDerivedType">
+    <DisplayName>BehaviorDerivedType</DisplayName>
+    <References>
+      <Reference IsForward="false" ReferenceType="ns=0;i=45">ns=1;i=1000</Reference>
+    </References>
+  </UAObjectType>
+  <UAObject NodeId="ns=1;i=2000" BrowseName="1:KnownObject">
+    <DisplayName>KnownObject</DisplayName>
+    <References>
+      <Reference ReferenceType="ns=0;i=40">ns=1;i=1001</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=2001" BrowseName="1:UnknownTypeObject">
+    <DisplayName>UnknownTypeObject</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=1;i=1999</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=2002" BrowseName="1:BaseTypeObject">
+    <DisplayName>BaseTypeObject</DisplayName>
+    <References/>
+  </UAObject>
+  <UAVariableType NodeId="ns=1;i=1100" BrowseName="1:BehaviorVariableBaseType"
+    DataType="Boolean">
+    <DisplayName>BehaviorVariableBaseType</DisplayName>
+    <References>
+      <Reference IsForward="false" ReferenceType="HasSubtype">i=63</Reference>
+    </References>
+  </UAVariableType>
+  <UAVariableType NodeId="ns=1;i=1101" BrowseName="1:BehaviorVariableDerivedType"
+    DataType="Boolean">
+    <DisplayName>BehaviorVariableDerivedType</DisplayName>
+    <References>
+      <Reference IsForward="false" ReferenceType="ns=0;i=45">ns=1;i=1100</Reference>
+    </References>
+  </UAVariableType>
+  <UAVariable NodeId="ns=1;i=2100" BrowseName="1:KnownVariable" DataType="Boolean">
+    <DisplayName>KnownVariable</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=1;i=1101</Reference>
+    </References>
+    <Value>
+      <uax:Boolean>true</uax:Boolean>
+    </Value>
+  </UAVariable>
+  <UAMethod NodeId="ns=1;i=3000" BrowseName="1:BehaviorMethod">
+    <DisplayName>BehaviorMethod</DisplayName>
+    <References/>
+  </UAMethod>
+</UANodeSet>

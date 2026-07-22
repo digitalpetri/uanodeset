@@ -8,13 +8,13 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UShort;
 public abstract class NodeSetNamespace extends NodeSetAddressSpace implements Namespace {
 
   private final String namespaceUri;
+  private final UShort namespaceIndex;
 
   public NodeSetNamespace(OpcUaServer server, String namespaceUri) {
     super(server);
 
     this.namespaceUri = namespaceUri;
-
-    server.getNamespaceTable().add(namespaceUri);
+    namespaceIndex = server.getNamespaceTable().add(namespaceUri);
   }
 
   @Override
@@ -24,7 +24,7 @@ public abstract class NodeSetNamespace extends NodeSetAddressSpace implements Na
 
   @Override
   public UShort getNamespaceIndex() {
-    return getServer().getNamespaceTable().getIndex(namespaceUri);
+    return namespaceIndex;
   }
 
   @Override

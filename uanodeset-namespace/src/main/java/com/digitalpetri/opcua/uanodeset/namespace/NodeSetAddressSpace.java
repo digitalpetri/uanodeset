@@ -2,6 +2,7 @@ package com.digitalpetri.opcua.uanodeset.namespace;
 
 import com.digitalpetri.opcua.uanodeset.NodeSet;
 import jakarta.xml.bind.JAXBException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import org.eclipse.milo.opcua.sdk.server.AddressSpaceFilter;
@@ -15,6 +16,14 @@ import org.eclipse.milo.opcua.stack.core.encoding.EncodingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Base address-space fragment that loads normalized NodeSet models during server startup.
+ *
+ * <p>Subclasses supply model streams, namespace filtering, and an encoding context. They may also
+ * register post-load behavior through {@link #registerNodeBehaviors(NodeBehaviorRegistry)}. The
+ * loader installs all selected nodes and references and finishes its value-decoding attempts before
+ * those callbacks run. All supplied streams are closed after startup succeeds or fails.
+ */
 public abstract class NodeSetAddressSpace extends ManagedAddressSpaceFragmentWithLifecycle {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -22,6 +31,11 @@ public abstract class NodeSetAddressSpace extends ManagedAddressSpaceFragmentWit
   private final AddressSpaceFilter addressSpaceFilter;
   private final SubscriptionModel subscriptionModel;
 
+  /**
+   * Create an address-space fragment whose NodeSet is loaded with the server lifecycle.
+   *
+   * @param server the server that owns the loaded nodes and subscriptions.
+   */
   public NodeSetAddressSpace(OpcUaServer server) {
     super(server);
 
@@ -97,6 +111,18 @@ public abstract class NodeSetAddressSpace extends ManagedAddressSpaceFragmentWit
    */
   protected abstract List<InputStream> getNodeSetInputStreams();
 
+  /**
+   * Register callbacks that attach behavior after all selected nodes complete the load phases.
+   *
+   * <p>The default implementation does not register any callbacks. Overrides may register
+   * type-specific, specific-node, and catch-all callbacks on {@code registry}. Callback failures
+   * abort startup. Every invocation includes a {@link NodeMatch} describing which registration
+   * matched the loaded node.
+   *
+   * @param registry the registry to populate before nodes are loaded.
+   */
+  protected void registerNodeBehaviors(NodeBehaviorRegistry registry) {}
+
   private void load() {
     List<InputStream> inputStreams = getNodeSetInputStreams();
 
@@ -109,18 +135,25 @@ public abstract class NodeSetAddressSpace extends ManagedAddressSpaceFragmentWit
           .getUri()
           .forEach(uri -> getServer().getNamespaceTable().add(uri));
 
+      var behaviorRegistry = new NodeBehaviorRegistry();
+      registerNodeBehaviors(behaviorRegistry);
+
       var loader =
           new NodeSetNodeLoader(
-              nodeSet, getNodeContext(), getEncodingContext(), this::filterNamespace);
+              nodeSet,
+              getNodeContext(),
+              getEncodingContext(),
+              this::filterNamespace,
+              behaviorRegistry);
 
       loader.loadNodes();
     } catch (JAXBException e) {
-      logger.error("Error loading NodeSet", e);
+      throw new IllegalStateException("Error loading NodeSet", e);
     } finally {
-      for (InputStream inputStream : getNodeSetInputStreams()) {
+      for (InputStream inputStream : inputStreams) {
         try {
           inputStream.close();
-        } catch (Exception e) {
+        } catch (IOException e) {
           logger.error("Error closing NodeSet input stream", e);
         }
       }

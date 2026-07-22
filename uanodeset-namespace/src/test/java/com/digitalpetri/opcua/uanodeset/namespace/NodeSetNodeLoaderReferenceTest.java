@@ -146,7 +146,7 @@ class NodeSetNodeLoaderReferenceTest {
     TestAddressSpace addressSpace = new TestAddressSpace(server);
     addressSpace.startup();
 
-    UShort namespaceIndex = server.getNamespaceTable().getIndex(TEST_NAMESPACE_URI);
+    UShort namespaceIndex = addressSpace.getNamespaceIndex();
     return new LoadedAddressSpace(server, addressSpace, namespaceIndex);
   }
 
