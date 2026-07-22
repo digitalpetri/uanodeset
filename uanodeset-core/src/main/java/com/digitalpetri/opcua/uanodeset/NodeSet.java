@@ -1,12 +1,12 @@
 package com.digitalpetri.opcua.uanodeset;
 
-import com.digitalpetri.opcua.uanodeset.parser.IndexUtil;
 import com.digitalpetri.opcua.uanodeset.parser.UANodeSetMerger;
 import com.digitalpetri.opcua.uanodeset.parser.UANodeSetParser;
+import com.digitalpetri.opcua.uanodeset.util.NodeIdUtil;
 import jakarta.xml.bind.JAXBException;
 import java.io.InputStream;
 import java.util.*;
-import java.util.regex.Matcher;
+import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.util.Namespaces;
 import org.jspecify.annotations.Nullable;
 import org.opcfoundation.ua.*;
@@ -18,37 +18,41 @@ import org.opcfoundation.ua.*;
  * loaders, validators, and generators need before they can reason about the model:
  *
  * <ul>
- *   <li>The URI table contains the base OPC UA namespace URI, and the UANodeSet contains the base
- *       OPC UA model
- *   <li>Fields containing NodeIds are replaced with NodeIds that have had any potential alias
- *       resolved
+ *   <li>The URI table and merged model contain the bundled OPC UA base namespace.
+ *   <li>Node identity, Variable and VariableType data types, DataType field data types, and
+ *       reference NodeIds have aliases resolved.
  *   <li>RolePermissions and AccessRestrictions defined at the model level have been applied to
- *       individual UANodes
- *   <li>Implicit References are created for all References that are not explicitly defined in the
- *       UANodeSet
+ *       individual UANodes.
+ *   <li>Every explicit reference has a synthesized inverse reference.
  * </ul>
  *
  * <p>Use {@link #load(InputStream)}, {@link #load(List)}, {@link #from(UANodeSet)}, or {@link
  * #from(Collection)} when starting from an extension model. Those factories merge the supplied
- * model with the bundled OPC UA base NodeSet before constructing the indexed context.
+ * model with the bundled OPC UA base NodeSet before constructing the indexed context. NodeIds in
+ * this API use indexes from that merged model's namespace URI table; consumers that materialize
+ * nodes in another address space must reindex them at that boundary.
  */
 public class NodeSet implements NodeSetContext {
 
   private final Map<String, String> aliases = new HashMap<>();
-  private final Map<String, UANode> nodeMap = new HashMap<>();
+  private final Map<NodeId, UANode> nodeMap = new HashMap<>();
 
   private final CombinedReferences combinedReferences = new CombinedReferences();
-  private final Map<String, List<Reference>> explicitReferences = new HashMap<>();
-  private final Map<String, List<Reference>> implicitReferences = new HashMap<>();
+  private final Map<NodeId, List<Reference>> explicitReferences = new HashMap<>();
+  private final Map<NodeId, List<Reference>> implicitReferences = new HashMap<>();
 
   private final UANodeSet nodeSet;
+
+  private volatile @Nullable ObjectTypeInfoTree objectTypeTree;
+  private volatile @Nullable VariableTypeInfoTree variableTypeTree;
 
   /**
    * Create an indexed context around an already-merged NodeSet.
    *
-   * <p>The supplied {@link UANodeSet} must already contain the base OPC UA model. Factories such as
-   * {@link #from(UANodeSet)} are the preferred entry point when callers have only an extension
-   * model.
+   * <p>The supplied {@link UANodeSet} must already contain the base OPC UA model. This constructor
+   * normalizes that JAXB object in place while building its indexes, so callers should treat it as
+   * read-only afterward. Factories such as {@link #from(UANodeSet)} are the preferred entry point
+   * when callers have only an extension model.
    *
    * @param nodeSet the merged NodeSet to index and normalize.
    */
@@ -78,6 +82,7 @@ public class NodeSet implements NodeSetContext {
         .forEach(
             node -> {
               node.setNodeId(resolveAlias(node.getNodeId()));
+              NodeId nodeId = NodeIdUtil.parse(node.getNodeId());
 
               if (node instanceof UADataType dataType) {
                 DataTypeDefinition definition = dataType.getDefinition();
@@ -108,7 +113,7 @@ public class NodeSet implements NodeSetContext {
 
                   Optional<ListOfRolePermissions> modelRolePermissions =
                       rolePermissionsByModelUri.computeIfAbsent(
-                          getNamespaceUri(node.getNodeId()),
+                          getNamespaceUri(nodeId),
                           namespaceUri -> {
                             Optional<ModelTableEntry> modelTableEntry =
                                 nodeSet.getModels().getModel().stream()
@@ -127,7 +132,7 @@ public class NodeSet implements NodeSetContext {
               if (node.getAccessRestrictions() == null) {
                 Optional<Integer> modelAccessRestrictions =
                     accessRestrictionsByModelUri.computeIfAbsent(
-                        getNamespaceUri(node.getNodeId()),
+                        getNamespaceUri(nodeId),
                         namespaceUri -> {
                           Optional<ModelTableEntry> modelTableEntry =
                               nodeSet.getModels().getModel().stream()
@@ -141,7 +146,7 @@ public class NodeSet implements NodeSetContext {
                 modelAccessRestrictions.ifPresent(node::setAccessRestrictions);
               }
 
-              nodeMap.put(node.getNodeId(), node);
+              nodeMap.put(nodeId, node);
 
               ListOfReferences references = node.getReferences();
 
@@ -154,14 +159,15 @@ public class NodeSet implements NodeSetContext {
                           reference.setValue(resolveAlias(reference.getValue()));
                           reference.setReferenceType(resolveAlias(reference.getReferenceType()));
                           explicitReferences
-                              .computeIfAbsent(node.getNodeId(), k -> new ArrayList<>())
+                              .computeIfAbsent(nodeId, k -> new ArrayList<>())
                               .add(reference);
                           var inverse = new Reference();
                           inverse.setValue(node.getNodeId());
                           inverse.setIsForward(!reference.isIsForward());
                           inverse.setReferenceType(reference.getReferenceType());
                           implicitReferences
-                              .computeIfAbsent(reference.getValue(), k -> new ArrayList<>())
+                              .computeIfAbsent(
+                                  NodeIdUtil.parse(reference.getValue()), k -> new ArrayList<>())
                               .add(inverse);
                         });
               }
@@ -179,13 +185,27 @@ public class NodeSet implements NodeSetContext {
   }
 
   /**
-   * Look up a node by its normalized NodeId string.
+   * Look up a node by a parseable NodeId string.
+   *
+   * <p>Lookup uses the semantic NodeId value, so an explicit namespace-zero prefix does not affect
+   * the result.
    *
    * @param nodeId the NodeId of the node to get.
    * @return the matching node, or {@code null} when the NodeId is not present.
    */
   @Override
   public @Nullable UANode getNode(String nodeId) {
+    return getNode(resolveNodeId(nodeId));
+  }
+
+  /**
+   * Look up a node by its semantic NodeId.
+   *
+   * @param nodeId the NodeId of the node to get.
+   * @return the matching node, or {@code null} when the NodeId is not present.
+   */
+  @Override
+  public @Nullable UANode getNode(NodeId nodeId) {
     return nodeMap.get(nodeId);
   }
 
@@ -200,6 +220,17 @@ public class NodeSet implements NodeSetContext {
    */
   @Override
   public List<Reference> getReferences(String nodeId) {
+    return getReferences(resolveNodeId(nodeId));
+  }
+
+  /**
+   * Get all references known for a node identified by semantic NodeId.
+   *
+   * @param nodeId the NodeId of the node to inspect.
+   * @return the deduplicated explicit and implicit references for the node.
+   */
+  @Override
+  public List<Reference> getReferences(NodeId nodeId) {
     return combinedReferences.get(nodeId);
   }
 
@@ -211,6 +242,17 @@ public class NodeSet implements NodeSetContext {
    */
   @Override
   public List<Reference> getExplicitReferences(String nodeId) {
+    return getExplicitReferences(resolveNodeId(nodeId));
+  }
+
+  /**
+   * Get source-declared references for a node identified by semantic NodeId.
+   *
+   * @param nodeId the NodeId of the node to inspect.
+   * @return the explicit references for the node.
+   */
+  @Override
+  public List<Reference> getExplicitReferences(NodeId nodeId) {
     return explicitReferences.getOrDefault(nodeId, Collections.emptyList());
   }
 
@@ -222,18 +264,97 @@ public class NodeSet implements NodeSetContext {
    */
   @Override
   public List<Reference> getImplicitReferences(String nodeId) {
+    return getImplicitReferences(resolveNodeId(nodeId));
+  }
+
+  /**
+   * Get synthesized inverse references for a node identified by semantic NodeId.
+   *
+   * @param nodeId the NodeId of the node to inspect.
+   * @return the implicit references for the node.
+   */
+  @Override
+  public List<Reference> getImplicitReferences(NodeId nodeId) {
     return implicitReferences.getOrDefault(nodeId, Collections.emptyList());
   }
 
-  private String getNamespaceUri(String nodeId) {
-    Matcher matcher = IndexUtil.PATTERN_NODE_ID.matcher(nodeId);
+  /**
+   * Get an instance's direct type followed by every known supertype in model namespace space.
+   *
+   * <p>The first entry is always the resolved direct type. If that type is absent from the merged
+   * model or is disconnected from the standard root, the result contains only the direct type;
+   * missing ancestry is not inferred. Nodes without {@code HasTypeDefinition} return an empty list.
+   *
+   * @param nodeId the NodeId of the Object or Variable instance to inspect.
+   * @return the direct type followed by known supertypes, from most specific to most general.
+   * @throws IllegalStateException if the known ObjectType or VariableType model contains a cycle or
+   *     a type with multiple supertypes.
+   */
+  public List<NodeId> getTypeHierarchy(NodeId nodeId) {
+    UANode node = getNode(nodeId);
+    return node != null ? getTypeHierarchy(node) : List.of();
+  }
 
-    int namespaceIndex = 0;
-    if (matcher.matches()) {
-      namespaceIndex = Integer.parseInt(matcher.group(1));
+  /**
+   * Get an instance's direct type followed by every known supertype in model namespace space.
+   *
+   * @param nodeId the parseable NodeId of the Object or Variable instance to inspect.
+   * @return the direct type followed by known supertypes, or an empty list when no direct type is
+   *     known.
+   * @throws IllegalStateException if the known ObjectType or VariableType model contains a cycle or
+   *     a type with multiple supertypes.
+   */
+  public List<NodeId> getTypeHierarchy(String nodeId) {
+    return getTypeHierarchy(resolveNodeId(nodeId));
+  }
+
+  /**
+   * Get an instance's direct type followed by every known supertype in model namespace space.
+   *
+   * @param node the normalized JAXB Object or Variable to inspect.
+   * @return the direct type followed by known supertypes, or an empty list when no direct type is
+   *     known.
+   * @throws IllegalStateException if the known ObjectType or VariableType model contains a cycle or
+   *     a type with multiple supertypes.
+   */
+  public List<NodeId> getTypeHierarchy(UANode node) {
+    Optional<NodeId> typeDefinition = getTypeDefinition(node);
+    if (typeDefinition.isEmpty()) {
+      return List.of();
     }
 
+    NodeId typeDefinitionId = typeDefinition.orElseThrow();
+    if (node instanceof UAObject) {
+      return getObjectTypeTree().getTypeHierarchy(typeDefinitionId);
+    } else if (node instanceof UAVariable) {
+      return getVariableTypeTree().getTypeHierarchy(typeDefinitionId);
+    } else {
+      return List.of();
+    }
+  }
+
+  private String getNamespaceUri(NodeId nodeId) {
+    int namespaceIndex = nodeId.getNamespaceIndex().intValue();
+
     return nodeSet.getNamespaceUris().getUri().get(namespaceIndex);
+  }
+
+  private synchronized ObjectTypeInfoTree getObjectTypeTree() {
+    if (objectTypeTree == null) {
+      objectTypeTree = ObjectTypeInfoTree.create(this);
+    }
+    return objectTypeTree;
+  }
+
+  private synchronized VariableTypeInfoTree getVariableTypeTree() {
+    if (variableTypeTree == null) {
+      variableTypeTree = VariableTypeInfoTree.create(this);
+    }
+    return variableTypeTree;
+  }
+
+  private NodeId resolveNodeId(String nodeIdOrAlias) {
+    return NodeIdUtil.parse(resolveAlias(nodeIdOrAlias));
   }
 
   private String resolveAlias(String nodeIdOrAlias) {
@@ -242,19 +363,15 @@ public class NodeSet implements NodeSetContext {
 
   private class CombinedReferences {
 
-    private final Map<String, List<Reference>> references = new HashMap<>();
+    private final Map<NodeId, List<Reference>> references = new HashMap<>();
 
-    private List<Reference> get(String nodeId) {
+    private List<Reference> get(NodeId nodeId) {
       return references.computeIfAbsent(
           nodeId,
           id -> {
             var combined = new LinkedHashSet<ReferenceWrapper>();
-            getExplicitReferences(nodeId).stream()
-                .map(ReferenceWrapper::new)
-                .forEach(combined::add);
-            getImplicitReferences(nodeId).stream()
-                .map(ReferenceWrapper::new)
-                .forEach(combined::add);
+            getExplicitReferences(id).stream().map(ReferenceWrapper::new).forEach(combined::add);
+            getImplicitReferences(id).stream().map(ReferenceWrapper::new).forEach(combined::add);
             return combined.stream().map(ReferenceWrapper::get).toList();
           });
     }
@@ -277,8 +394,8 @@ public class NodeSet implements NodeSetContext {
         if (a == null || b == null) {
           return false;
         }
-        return Objects.equals(a.getValue(), b.getValue())
-            && Objects.equals(a.getReferenceType(), b.getReferenceType())
+        return NodeIdUtil.parse(a.getValue()).equals(NodeIdUtil.parse(b.getValue()))
+            && NodeIdUtil.parse(a.getReferenceType()).equals(NodeIdUtil.parse(b.getReferenceType()))
             && a.isIsForward() == b.isIsForward();
       }
 
@@ -297,7 +414,9 @@ public class NodeSet implements NodeSetContext {
       public int hashCode() {
         if (reference == null) return 0;
         return Objects.hash(
-            reference.getReferenceType(), reference.getValue(), reference.isIsForward());
+            NodeIdUtil.parse(reference.getReferenceType()),
+            NodeIdUtil.parse(reference.getValue()),
+            reference.isIsForward());
       }
     }
   }

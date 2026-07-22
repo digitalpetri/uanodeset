@@ -1,10 +1,6 @@
 package com.digitalpetri.opcua.uanodeset;
 
-import com.digitalpetri.opcua.uanodeset.util.NodeIdUtil;
-import java.util.List;
 import org.eclipse.milo.opcua.stack.core.NodeIds;
-import org.opcfoundation.ua.Reference;
-import org.opcfoundation.ua.UANode;
 import org.opcfoundation.ua.UAObjectType;
 
 /**
@@ -15,8 +11,6 @@ import org.opcfoundation.ua.UAObjectType;
  * references from a {@link NodeSetContext}.
  */
 public class ObjectTypeInfoTree extends TypeInfoTree<UAObjectType, ObjectTypeInfo> {
-
-  private static final boolean DEBUG = false;
 
   /**
    * Create an object type tree from a linked root node.
@@ -35,46 +29,13 @@ public class ObjectTypeInfoTree extends TypeInfoTree<UAObjectType, ObjectTypeInf
    *
    * @param context the context that supplies nodes and resolved references.
    * @return an object type tree rooted at {@code BaseObjectType}.
-   * @throws IllegalStateException if the context does not contain {@code BaseObjectType}.
+   * @throws IllegalStateException if the context does not contain {@code BaseObjectType}, the known
+   *     hierarchy contains a cycle, or a type declares multiple supertypes.
    */
   public static ObjectTypeInfoTree create(NodeSetContext context) {
-    UANode node = context.getNode(NodeIdUtil.get(NodeIds.BaseObjectType));
-
-    if (node instanceof UAObjectType objectTypeNode) {
-      var rootTypeInfo = new ObjectTypeInfo(null, objectTypeNode);
-
-      addChildren(context, rootTypeInfo, 0);
-
-      return new ObjectTypeInfoTree(rootTypeInfo);
-    } else {
-      throw new IllegalStateException("UAObjectType BaseObjectType not found");
-    }
-  }
-
-  private static void addChildren(NodeSetContext context, ObjectTypeInfo typeInfo, int level) {
-    List<Reference> references = context.getReferences(typeInfo.getTypeNode().getNodeId());
-
-    List<UAObjectType> subTypes =
-        references.stream()
-            .filter(
-                r -> r.isIsForward() && NodeIdUtil.equals(NodeIds.HasSubtype, r.getReferenceType()))
-            .map(r -> context.getNode(r.getValue()))
-            .filter(n -> n instanceof UAObjectType)
-            .map(n -> (UAObjectType) n)
-            .toList();
-
-    for (UAObjectType objectType : subTypes) {
-      if (DEBUG) {
-        for (int i = 0; i < level; i++) {
-          System.out.print("  ");
-        }
-        System.out.println(objectType.getBrowseName());
-      }
-
-      var child = new ObjectTypeInfo(typeInfo, objectType);
-      typeInfo.addChild(child);
-
-      addChildren(context, child, level + 1);
-    }
+    ObjectTypeInfo rootTypeInfo =
+        TypeInfoTreeBuilder.build(
+            context, NodeIds.BaseObjectType, UAObjectType.class, ObjectTypeInfo::new);
+    return new ObjectTypeInfoTree(rootTypeInfo);
   }
 }

@@ -1,16 +1,13 @@
 package com.digitalpetri.opcua.uanodeset;
 
 import com.digitalpetri.opcua.uanodeset.util.NodeIdUtil;
-import java.util.List;
 import java.util.stream.Stream;
 import org.eclipse.milo.opcua.stack.core.NodeIds;
 import org.eclipse.milo.opcua.stack.core.OpcUaDataType;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UNumber;
 import org.opcfoundation.ua.DataTypeField;
-import org.opcfoundation.ua.Reference;
 import org.opcfoundation.ua.UADataType;
-import org.opcfoundation.ua.UANode;
 
 /**
  * Public datatype hierarchy built from {@code BaseDataType}.
@@ -21,8 +18,6 @@ import org.opcfoundation.ua.UANode;
  * simple type, or a subtype of another datatype.
  */
 public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
-
-  private static final boolean DEBUG = false;
 
   /**
    * Create a datatype tree from a linked root node.
@@ -408,46 +403,13 @@ public class DataTypeInfoTree extends TypeInfoTree<UADataType, DataTypeInfo> {
    *
    * @param context the context that supplies nodes and resolved references.
    * @return a datatype tree rooted at {@code BaseDataType}.
-   * @throws IllegalStateException if the context does not contain {@code BaseDataType}.
+   * @throws IllegalStateException if the context does not contain {@code BaseDataType}, the known
+   *     hierarchy contains a cycle, or a type declares multiple supertypes.
    */
   public static DataTypeInfoTree create(NodeSetContext context) {
-    UANode node = context.getNode(NodeIdUtil.get(NodeIds.BaseDataType));
-
-    if (node instanceof UADataType dataTypeNode) {
-      var rootTypeInfo = new DataTypeInfo(null, dataTypeNode);
-
-      addChildren(context, rootTypeInfo, 0);
-
-      return new DataTypeInfoTree(rootTypeInfo);
-    } else {
-      throw new IllegalStateException("UADataType BaseDataType not found");
-    }
-  }
-
-  private static void addChildren(NodeSetContext context, DataTypeInfo typeInfo, int level) {
-    List<Reference> references = context.getReferences(typeInfo.getTypeNode().getNodeId());
-
-    List<UADataType> subTypes =
-        references.stream()
-            .filter(
-                r -> r.isIsForward() && NodeIdUtil.equals(NodeIds.HasSubtype, r.getReferenceType()))
-            .map(r -> context.getNode(r.getValue()))
-            .filter(n -> n instanceof UADataType)
-            .map(n -> (UADataType) n)
-            .toList();
-
-    for (UADataType dataType : subTypes) {
-      if (DEBUG) {
-        for (int i = 0; i < level; i++) {
-          System.out.print("  ");
-        }
-        System.out.println(dataType.getBrowseName());
-      }
-
-      var child = new DataTypeInfo(typeInfo, dataType);
-      typeInfo.addChild(child);
-
-      addChildren(context, child, level + 1);
-    }
+    DataTypeInfo rootTypeInfo =
+        TypeInfoTreeBuilder.build(
+            context, NodeIds.BaseDataType, UADataType.class, DataTypeInfo::new);
+    return new DataTypeInfoTree(rootTypeInfo);
   }
 }

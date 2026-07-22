@@ -1,10 +1,6 @@
 package com.digitalpetri.opcua.uanodeset;
 
-import com.digitalpetri.opcua.uanodeset.util.NodeIdUtil;
-import java.util.List;
 import org.eclipse.milo.opcua.stack.core.NodeIds;
-import org.opcfoundation.ua.Reference;
-import org.opcfoundation.ua.UANode;
 import org.opcfoundation.ua.UAReferenceType;
 
 /**
@@ -15,8 +11,6 @@ import org.opcfoundation.ua.UAReferenceType;
  * does not include any code-generation-specific naming policy.
  */
 public class ReferenceTypeInfoTree extends TypeInfoTree<UAReferenceType, ReferenceTypeInfo> {
-
-  private static final boolean DEBUG = false;
 
   /**
    * Create a reference type tree from a linked root node.
@@ -35,46 +29,13 @@ public class ReferenceTypeInfoTree extends TypeInfoTree<UAReferenceType, Referen
    *
    * @param context the context that supplies nodes and resolved references.
    * @return a reference type tree rooted at {@code References}.
-   * @throws IllegalStateException if the context does not contain {@code References}.
+   * @throws IllegalStateException if the context does not contain {@code References}, the known
+   *     hierarchy contains a cycle, or a type declares multiple supertypes.
    */
   public static ReferenceTypeInfoTree create(NodeSetContext context) {
-    UANode node = context.getNode(NodeIdUtil.get(NodeIds.References));
-
-    if (node instanceof UAReferenceType referenceTypeNode) {
-      var rootTypeInfo = new ReferenceTypeInfo(null, referenceTypeNode);
-
-      addChildren(context, rootTypeInfo, 0);
-
-      return new ReferenceTypeInfoTree(rootTypeInfo);
-    } else {
-      throw new IllegalStateException("UAReferenceType References not found");
-    }
-  }
-
-  private static void addChildren(NodeSetContext context, ReferenceTypeInfo typeInfo, int level) {
-    List<Reference> references = context.getReferences(typeInfo.getTypeNode().getNodeId());
-
-    List<UAReferenceType> subTypes =
-        references.stream()
-            .filter(
-                r -> r.isIsForward() && NodeIdUtil.equals(NodeIds.HasSubtype, r.getReferenceType()))
-            .map(r -> context.getNode(r.getValue()))
-            .filter(n -> n instanceof UAReferenceType)
-            .map(n -> (UAReferenceType) n)
-            .toList();
-
-    for (UAReferenceType referenceType : subTypes) {
-      if (DEBUG) {
-        for (int i = 0; i < level; i++) {
-          System.out.print("  ");
-        }
-        System.out.println(referenceType.getBrowseName());
-      }
-
-      var child = new ReferenceTypeInfo(typeInfo, referenceType);
-      typeInfo.addChild(child);
-
-      addChildren(context, child, level + 1);
-    }
+    ReferenceTypeInfo rootTypeInfo =
+        TypeInfoTreeBuilder.build(
+            context, NodeIds.References, UAReferenceType.class, ReferenceTypeInfo::new);
+    return new ReferenceTypeInfoTree(rootTypeInfo);
   }
 }
